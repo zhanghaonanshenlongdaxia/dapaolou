@@ -14,8 +14,8 @@ namespace Dapaolou.Player
         [Header("AI 配置")]
         [SerializeField] private int playerId = 1;              // 控制的玩家ID
         [SerializeField] private float thinkDelay = 1.2f;       // 思考时间（秒）
-        [SerializeField] private float aimYawError = 2.5f;      // 瞄准横向误差（度）
-        [SerializeField] private Vector2 powerRange = new Vector2(0.4f, 1.0f); // 随机力度范围（0-1）
+        [SerializeField] private float aimYawError = 1.5f;      // 瞄准横向误差（度）
+        [SerializeField] private Vector2 powerRange = new Vector2(0.75f, 1.0f); // 随机力度范围（0-1）
 
         private PlayerManager playerManager;
         private FirstPersonController fpsController;
@@ -98,22 +98,23 @@ namespace Dapaolou.Player
                 yield break;
             }
 
-            // 瞄准敌方炮楼：水平朝向 + 弹道仰角补偿（重力下坠）+ 随机横向误差
+            // 瞄准敌方炮楼：弹道仰角补偿重力下坠，并额外 +1.5m 距离补偿空气阻力造成的射程衰减
             var enemy = gm.GetPlayer((playerId + 1) % 2);
             if (enemy == null) yield break;
-            float speed = shooter.GetLaunchSpeed(power);
             Vector3 toTarget = enemy.towerCenter - marble.transform.position;
             float dist = new Vector3(toTarget.x, 0f, toTarget.z).magnitude;
+            float speed = shooter.GetLaunchSpeed(power);
             float g = Mathf.Abs(Physics.gravity.y);
-            float sinTheta = Mathf.Clamp(g * dist / (2f * speed * speed), 0f, 0.9f);
+            float dEff = dist + 1.5f;   // drag 补偿：真空射程需覆盖到目标后再远 1.5m
+            float sinTheta = Mathf.Clamp(g * dEff / (2f * speed * speed), 0f, 0.9f);
             float theta = Mathf.Asin(sinTheta) * Mathf.Rad2Deg;
             Vector3 dir = new Vector3(toTarget.x, 0f, toTarget.z).normalized;
-            dir.y = Mathf.Tan(theta * Mathf.Deg2Rad);   // 抬起仰角
+            dir.y = Mathf.Tan(theta * Mathf.Deg2Rad);
             dir.Normalize();
             float yawError = Random.Range(-aimYawError, aimYawError);
             dir = Quaternion.AngleAxis(yawError, Vector3.up) * dir;
 
-            Debug.Log($"[AI] Player {playerId} fires {marble.name} power={power:F2} speed={speed:F1} theta={theta:F1}");
+            Debug.Log($"[AI] Player {playerId} fires {marble.name} power={power:F2}");
             shooter.FireMarble(marble, dir, power);
         }
     }

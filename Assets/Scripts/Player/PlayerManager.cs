@@ -13,6 +13,7 @@ namespace Dapaolou.Player
         [SerializeField] private int playerId = 0;
         [SerializeField] private Color playerColor = Color.blue;
         [SerializeField] private string playerName = "Player";
+        [SerializeField] private bool isLocalHuman = false;    // 是否人类玩家（AI 玩家为 false）
         
         [Header("组件引用")]
         [SerializeField] private FirstPersonController fpsController;
@@ -33,6 +34,7 @@ namespace Dapaolou.Player
         // 内部状态
         private bool isMyTurn = false;
         private bool isAiming = false;
+        private bool isSpectating = false;
         
         void Awake()
         {
@@ -81,8 +83,11 @@ namespace Dapaolou.Player
                 marbleShooter.OnStateChanged += OnShootStateChanged;
             }
             
-            // 默认第一人称视角（操作时身体模型不遮挡视野），Tab 可切换
-            SetCameraView(true);
+            // 人类玩家默认第一人称视角（身体模型不遮挡视野），Tab 可切换；AI 玩家不使用相机
+            if (isLocalHuman)
+            {
+                SetCameraView(true);
+            }
         }
         
         #endregion
@@ -161,6 +166,9 @@ namespace Dapaolou.Player
         
         private void SetCameraView(bool firstPerson)
         {
+            // AI 玩家不操作相机；其第三人称模型保持可见，供人类玩家观看
+            if (!isLocalHuman) return;
+
             isFirstPerson = firstPerson;
             
             if (playerCamera == null) return;
@@ -227,6 +235,42 @@ namespace Dapaolou.Player
             {
                 renderer.enabled = visible;
             }
+        }
+
+        /// <summary>
+        /// 观战视角：镜头移到对手身后上方，看着对方瞄准发射（弹珠飞向我方炮楼）
+        /// </summary>
+        private void EnterSpectateCamera(int watcherIndex)
+        {
+            if (playerCamera == null) return;
+
+            Transform watched = null;
+            foreach (var pm in FindObjectsOfType<PlayerManager>())
+            {
+                if (pm.GetPlayerId() == watcherIndex)
+                {
+                    watched = pm.transform;
+                    break;
+                }
+            }
+            if (watched == null) return;
+
+            playerCamera.transform.SetParent(null);
+            playerCamera.transform.position = watched.position - watched.forward * 2.2f + Vector3.up * 2.0f;
+            playerCamera.transform.LookAt(watched.position + watched.forward * 4f + Vector3.up * 0.3f);
+            isSpectating = true;
+        }
+
+        /// <summary>
+        /// 恢复第一人称机位
+        /// </summary>
+        private void RestoreFirstPersonCamera()
+        {
+            if (playerCamera == null) return;
+            playerCamera.transform.SetParent(transform);
+            playerCamera.transform.localPosition = new Vector3(0f, 1.6f, 0f);
+            playerCamera.transform.localRotation = Quaternion.identity;
+            isSpectating = false;
         }
         
         #endregion
@@ -300,6 +344,12 @@ namespace Dapaolou.Player
                 {
                     fpsController.enabled = true;
                 }
+
+                // 轮到我：回到第一人称
+                if (isLocalHuman)
+                {
+                    RestoreFirstPersonCamera();
+                }
             }
             else
             {
@@ -309,6 +359,12 @@ namespace Dapaolou.Player
                 if (fpsController != null)
                 {
                     fpsController.enabled = false;
+                }
+
+                // 轮到对手：进入观战视角，看着对方弹
+                if (isLocalHuman)
+                {
+                    EnterSpectateCamera(playerIndex);
                 }
             }
         }
@@ -386,6 +442,14 @@ namespace Dapaolou.Player
             {
                 thirdPersonModel.SetPlayerColor(color);
             }
+        }
+
+        /// <summary>
+        /// 标记是否为人类玩家（AI 玩家为 false）
+        /// </summary>
+        public void SetLocalHuman(bool human)
+        {
+            isLocalHuman = human;
         }
         
         /// <summary>
