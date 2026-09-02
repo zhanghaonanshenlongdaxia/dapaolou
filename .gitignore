@@ -1,0 +1,49 @@
+# Unity generated
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]serSettings/
+MemoryCaptures/
+[Rr]ecordings/
+sysinfo.txt
+
+# IDE / solution files (auto-generated)
+.vs/
+.idea/
+.vscode/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Builds
+*.apk
+*.aab
+*.unitypackage
+*.app
+*.exe
+
+# Codely local tooling
+.codely-cli/
+.codely.packages/
+.codely/
+.codelyignore
+.com-unity-codely.json
+mem-log/
+screenshots/
+
+# OS junk
+Thumbs.db
+Desktop.ini
