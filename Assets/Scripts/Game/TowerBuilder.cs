@@ -157,6 +157,7 @@ namespace Dapaolou.Game
             {
                 marbleData = marbleObj.AddComponent<MarbleData>();
             }
+            marbleObj.AddComponent<MarbleCollisionHandler>();
             
             marbleData.marbleType = type;
             marbleData.ownerPlayerId = playerId;

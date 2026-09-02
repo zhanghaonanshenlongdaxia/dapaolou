@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7ac32f7d06d9fa64293c12566964ac81, type: 3}
+  m_Name: GameConfig
+  m_EditorClassIdentifier: 
+  towerBaseCount: 3
+  towerTopCount: 1
+  towerSpacing: 0.05
+  towerBaseHeight: 0.025
+  soldierCountPerPlayer: 3
+  soldierSpawnRadius: 0.5
+  soldierSpawnAngle: 45
+  secondHitThreshold: 3
+  secondHitRadius: 0.15
+  secondHitTimeWindow: 5
+  allowDismantleTower: 1
+  maxDismantlePerTurn: 1
+  turnTimeLimit: 30
+  shootCooldown: 1
+  marbleStopThreshold: 0.1
+  destroyAllTowers: 1
+  destroyAllSoldiers: 0
+  scoreToWin: 0

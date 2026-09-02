@@ -63,6 +63,17 @@ namespace Dapaolou.Marble
         {
             initialPosition = transform.position;
         }
+
+        void Update()
+        {
+            // 滚动中的弹珠速度低于阈值时直接刹停，避免长时间蠕动导致回合等待过久
+            if (state == MarbleState.Rolling && rb != null && rb.velocity.magnitude < 0.3f)
+            {
+                rb.velocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+                state = MarbleState.Idle;
+            }
+        }
         
         /// <summary>
         /// 检查弹珠是否静止

@@ -3,6 +3,7 @@
 ## Codely Structured Memories
 
 ### User
+- [2026-09-03 04:02:48] 用户本地部署了混元(Hunyuan)3D 大模型，Unity 项目需要 3D 模型资产时可直接用本地混元生成（generate_3d_model provider=hunyuan 或 TJGenerators），无需询问是否用付费云端服务。
 
 ### Feedback
 

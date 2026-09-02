@@ -232,6 +232,7 @@ namespace Dapaolou.Game
             marbleData.marbleType = MarbleType.Soldier;
             marbleData.ownerPlayerId = playerId;
             marbleData.towerIndex = -1;
+            marbleObj.AddComponent<MarbleCollisionHandler>();
             
             // 设置颜色
             Renderer renderer = marbleObj.GetComponent<Renderer>();
@@ -409,10 +410,16 @@ namespace Dapaolou.Game
         private void OnMarblesStopped()
         {
             isWaitingForMarbles = false;
-            
+
+            // 弹珠停止后恢复为 Idle，供后续回合重新选取
+            if (lastShotMarble != null && lastShotMarble.state == MarbleState.Rolling)
+            {
+                lastShotMarble.state = MarbleState.Idle;
+            }
+
             // 检查碰撞结果
             CheckCollisions();
-            
+
             // 结束回合
             EndCurrentTurn();
         }
