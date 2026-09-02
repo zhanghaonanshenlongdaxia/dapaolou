@@ -13,7 +13,7 @@ namespace Dapaolou.Player
     {
         [Header("AI 配置")]
         [SerializeField] private int playerId = 1;              // 控制的玩家ID
-        [SerializeField] private float thinkDelay = 2.5f;       // 思考/瞄准准备时间（秒）
+        [SerializeField] private Vector2 thinkDelayRange = new Vector2(3f, 8f); // 思考/找角度时间范围（秒）
         [SerializeField] private float aimYawError = 1.5f;      // 瞄准横向误差（度）
         [SerializeField] private Vector2 powerRange = new Vector2(0.75f, 1.0f); // 随机力度范围（0-1）
 
@@ -64,19 +64,58 @@ namespace Dapaolou.Player
         }
 
         /// <summary>
-        /// AI 回合流程：思考 → 选弹珠 → 瞄准敌方炮楼（带随机误差）→ 随机力度发射
+        /// AI 回合流程：来回走位反复找角度（3~8s）→ 选弹珠 → 确定方向力度 → 发射 → 弹珠特写
         /// </summary>
         private IEnumerator TakeTurn()
         {
             // AI 不需要人类输入控制
             if (fpsController != null) fpsController.enabled = false;
 
-            // 思考延迟，模拟瞄准过程
-            yield return new WaitForSeconds(thinkDelay);
-            if (!turnActive) yield break;
-
             var gm = GameManager.Instance;
             if (gm == null || gm.GetCurrentPhase() != GamePhase.Playing) yield break;
+
+            // 思考阶段：来回移动踱步、左右张望，模拟反复找角度
+            float thinkTime = Random.Range(thinkDelayRange.x, thinkDelayRange.y);
+            float elapsed = 0f;
+            Vector3 wanderTarget = transform.position;
+            var cc = GetComponent<CharacterController>();
+            var enemyPreview = gm.GetPlayer((playerId + 1) % 2);
+            Vector3 aimPreviewDir = enemyPreview != null
+                ? (enemyPreview.towerCenter - transform.position).normalized
+                : transform.forward;
+
+            while (elapsed < thinkTime && turnActive && gm.GetCurrentPhase() == GamePhase.Playing)
+            {
+                // 走位：到达附近随机点后换下一个
+                Vector3 flatDelta = wanderTarget - transform.position;
+                flatDelta.y = 0f;
+                if (flatDelta.magnitude < 0.15f)
+                {
+                    wanderTarget = transform.position +
+                        new Vector3(Random.Range(-1.2f, 1.2f), 0f, Random.Range(-0.6f, 0.6f));
+                }
+
+                if (flatDelta.magnitude > 0.05f)
+                {
+                    Vector3 step = flatDelta.normalized * 1.0f * Time.deltaTime;
+                    if (cc != null) cc.Move(step);
+                    else transform.position += step;
+                    transform.rotation = Quaternion.Slerp(transform.rotation,
+                        Quaternion.LookRotation(flatDelta.normalized), Time.deltaTime * 4f);
+                }
+                else
+                {
+                    // 原地左右张望（反复找角度）
+                    float sway = Mathf.Sin(elapsed * 2.5f) * 12f;
+                    Vector3 lookDir = Quaternion.AngleAxis(sway, Vector3.up) * aimPreviewDir;
+                    transform.rotation = Quaternion.Slerp(transform.rotation,
+                        Quaternion.LookRotation(lookDir), Time.deltaTime * 5f);
+                }
+
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+            if (!turnActive || gm.GetCurrentPhase() != GamePhase.Playing) yield break;
 
             // 选择弹珠（优先小兵）
             var marbles = gm.GetPlayer(playerId)?.GetAvailableMarbles();
@@ -117,12 +156,12 @@ namespace Dapaolou.Player
             Debug.Log($"[AI] Player {playerId} fires {marble.name} power={power:F2}");
             shooter.FireMarble(marble, dir, power);
 
-            // 弹珠特写：让人类玩家的镜头短暂跟随这颗弹珠，之后自动恢复第一人称
+            // 弹珠特写：让人类玩家的镜头跟随这颗弹珠 3 秒，之后自动恢复第一人称
             foreach (var pm in FindObjectsOfType<PlayerManager>())
             {
                 if (pm.IsLocalHuman)
                 {
-                    pm.PlayShotCloseup(marble);
+                    pm.PlayShotCloseup(marble, 3f);
                     break;
                 }
             }

@@ -241,13 +241,13 @@ namespace Dapaolou.Player
         /// <summary>
         /// 弹珠特写：镜头短暂跟随刚射出的弹珠，随后恢复第一人称
         /// </summary>
-        public void PlayShotCloseup(MarbleData marble)
+        public void PlayShotCloseup(MarbleData marble, float duration = 1.4f)
         {
             if (!isLocalHuman || playerCamera == null || marble == null) return;
-            StartCoroutine(ShotCloseupRoutine(marble));
+            StartCoroutine(ShotCloseupRoutine(marble, duration));
         }
 
-        private IEnumerator ShotCloseupRoutine(MarbleData marble)
+        private IEnumerator ShotCloseupRoutine(MarbleData marble, float duration)
         {
             if (fpsController != null) fpsController.enabled = false;
 
@@ -258,7 +258,7 @@ namespace Dapaolou.Player
 
             playerCamera.transform.SetParent(null);
             float t = 0f;
-            while (t < 1.4f && marble != null)
+            while (t < duration && marble != null)
             {
                 Vector3 mp = marble.transform.position;
                 playerCamera.transform.position = mp - vdir * 0.9f + Vector3.up * 0.45f;

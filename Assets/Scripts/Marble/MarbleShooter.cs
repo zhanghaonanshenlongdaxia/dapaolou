@@ -1,5 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
+using Dapaolou.Game;
+using Dapaolou.Player;
 
 namespace Dapaolou.Marble
 {
@@ -49,10 +51,16 @@ namespace Dapaolou.Marble
         [Header("UI提示")]
         [SerializeField] private GameObject aimDotPrefab;           // 瞄准点预制体
         [SerializeField] private GameObject tremorIndicator;        // 手抖指示器
-        
+
+        [Header("蓄力仪表盘")]
+        [SerializeField] private GameObject powerGauge;             // 蓄力扇形仪表盘（油门盘）
+        [SerializeField] private Image powerGaugeFill;              // 蓄力填充扇形
+
         // 内部状态
         private ShootState currentState = ShootState.Idle;
         private MarbleData currentMarble;                           // 当前要发射的弹珠
+        private MarbleData aimedMarble;                             // 准星指向的己方弹珠（瞄准哪个弹哪个）
+        private MarbleData highlightedMarble;                       // 当前高亮的弹珠
         private float currentChargeTime = 0f;
         private float currentPower = 0f;                            // 当前力度 (0-1)
         private Vector3 aimDirection;                               // 瞄准方向
@@ -166,6 +174,7 @@ namespace Dapaolou.Marble
         {
             UpdateAimDirection();
             UpdateAimVisuals();
+            SelectAimedMarble();
             
             // 按下鼠标左键开始蓄力
             if (Input.GetMouseButtonDown(0))
@@ -177,6 +186,78 @@ namespace Dapaolou.Marble
             if (Input.GetMouseButtonDown(1))
             {
                 CancelAiming();
+            }
+        }
+
+        /// <summary>
+        /// 准星选弹：瞄准线指向的己方弹珠即为要弹的弹珠，并点亮高光
+        /// </summary>
+        private void SelectAimedMarble()
+        {
+            var gm = GameManager.Instance;
+            if (gm == null) { aimedMarble = null; }
+            else
+            {
+                // 仅当前回合玩家的发射器做准星选弹（AI 回合时该发射器归 AI，不做准星高亮）
+                var pm = GetComponent<PlayerManager>();
+                if (pm != null && pm.GetPlayerId() != gm.GetCurrentPlayerIndex())
+                {
+                    aimedMarble = null;
+                }
+                else
+                {
+                    var player = gm.GetCurrentPlayer();
+                    Ray ray = playerCamera != null
+                        ? playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f))
+                        : new Ray(transform.position + Vector3.up * 1.6f, transform.forward);
+
+                    MarbleData best = null;
+                    float bestDist = float.MaxValue;
+                    foreach (var m in player.GetAvailableMarbles())
+                    {
+                        if (m == null) continue;
+                        Vector3 toM = m.transform.position - ray.origin;
+                        float along = Vector3.Dot(toM, ray.direction);
+                        if (along < 0f || along > aimDistance + 2f) continue;
+                        float perp = Vector3.Cross(ray.direction, toM).magnitude;
+                        if (perp < 0.22f && along < bestDist)
+                        {
+                            best = m;
+                            bestDist = along;
+                        }
+                    }
+                    aimedMarble = best;
+                }
+            }
+
+            // 高亮切换（瞄准哪个就弹哪个）
+            if (highlightedMarble != aimedMarble)
+            {
+                SetHighlight(highlightedMarble, false);
+                SetHighlight(aimedMarble, true);
+                highlightedMarble = aimedMarble;
+                if (aimedMarble != null) currentMarble = aimedMarble;
+            }
+        }
+
+        /// <summary>
+        /// 弹珠高光开关（URP 自发光）
+        /// </summary>
+        private void SetHighlight(MarbleData marble, bool on)
+        {
+            if (marble == null) return;
+            var r = marble.GetComponent<Renderer>();
+            if (r == null) return;
+            var mat = r.material;
+            if (on)
+            {
+                mat.EnableKeyword("_EMISSION");
+                mat.SetColor("_EmissionColor", Color.white * 0.9f);
+            }
+            else
+            {
+                mat.SetColor("_EmissionColor", Color.black);
+                mat.DisableKeyword("_EMISSION");
             }
         }
         
@@ -348,10 +429,14 @@ namespace Dapaolou.Marble
             
             ChangeState(ShootState.Charging);
             
-            // 显示力度条
+            // 显示力度条与蓄力仪表盘
             if (powerSlider != null)
             {
                 powerSlider.gameObject.SetActive(true);
+            }
+            if (powerGauge != null)
+            {
+                powerGauge.SetActive(true);
             }
         }
         
@@ -447,6 +532,14 @@ namespace Dapaolou.Marble
         }
         
         /// <summary>
+        /// 获取当前准星指向的己方弹珠（瞄准哪个弹哪个）
+        /// </summary>
+        public MarbleData GetAimedMarble()
+        {
+            return aimedMarble;
+        }
+
+        /// <summary>
         /// 获取当前力度
         /// </summary>
         public float GetCurrentPower()
@@ -513,6 +606,12 @@ namespace Dapaolou.Marble
             {
                 powerFill.color = powerGradient.Evaluate(currentPower);
             }
+
+            if (powerGaugeFill != null)
+            {
+                powerGaugeFill.fillAmount = currentPower;
+                powerGaugeFill.color = powerGradient.Evaluate(currentPower);
+            }
         }
         
         private void HideAimVisuals()
@@ -531,6 +630,16 @@ namespace Dapaolou.Marble
             {
                 powerSlider.gameObject.SetActive(false);
             }
+
+            if (powerGauge != null)
+            {
+                powerGauge.SetActive(false);
+            }
+
+            // 清除准星高亮
+            SetHighlight(highlightedMarble, false);
+            highlightedMarble = null;
+            aimedMarble = null;
         }
         
         private void ChangeState(ShootState newState)

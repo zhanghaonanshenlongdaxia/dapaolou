@@ -477,7 +477,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   playerId: 1
-  thinkDelay: 1.2
+  thinkDelay: 2.5
   aimYawError: 2.5
   powerRange: {x: 0.4, y: 1}
 --- !u!21 &122078399
