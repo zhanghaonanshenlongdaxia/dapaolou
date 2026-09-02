@@ -66,12 +66,20 @@ namespace Dapaolou.Marble
 
         void Update()
         {
-            // 滚动中的弹珠速度低于阈值时直接刹停，避免长时间蠕动导致回合等待过久
-            if (state == MarbleState.Rolling && rb != null && rb.velocity.magnitude < 0.3f)
+            // 滚动中的弹珠：低速直接刹停，避免长时间蠕动导致回合等待过久
+            if (state == MarbleState.Rolling && rb != null)
             {
-                rb.velocity = Vector3.zero;
-                rb.angularVelocity = Vector3.zero;
-                state = MarbleState.Idle;
+                if (rb.velocity.magnitude < 0.3f)
+                {
+                    rb.velocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                    state = MarbleState.Idle;
+                }
+                else if (transform.position.y < -2f)
+                {
+                    // 滚出场地坠落：回收到出生点，避免回合永久卡死
+                    ResetToInitial();
+                }
             }
         }
         

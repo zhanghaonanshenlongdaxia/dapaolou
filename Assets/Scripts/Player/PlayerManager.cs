@@ -81,8 +81,8 @@ namespace Dapaolou.Player
                 marbleShooter.OnStateChanged += OnShootStateChanged;
             }
             
-            // 初始为第三人称视角
-            SetCameraView(false);
+            // 默认第一人称视角（操作时身体模型不遮挡视野），Tab 可切换
+            SetCameraView(true);
         }
         
         #endregion

@@ -375,12 +375,14 @@ namespace Dapaolou.Marble
             if (rb != null)
             {
                 rb.isKinematic = false;
-                rb.AddForce(direction * force, ForceMode.Impulse);
-                
+                // VelocityChange：力度即出膛速度(m/s)，与手册"力度>5 打爆"判定一致，
+                // 避免 Impulse 在轻质量弹珠上产生数百 m/s 的荒谬速度
+                rb.AddForce(direction * force, ForceMode.VelocityChange);
+
                 // 添加一点随机旋转
-                rb.AddTorque(Random.insideUnitSphere * force * 0.5f, ForceMode.Impulse);
+                rb.AddTorque(Random.insideUnitSphere * force * 0.05f, ForceMode.VelocityChange);
             }
-            
+
             marble.state = MarbleState.Rolling;
         }
         
@@ -436,6 +438,32 @@ namespace Dapaolou.Marble
             return currentPower;
         }
         
+        /// <summary>
+        /// 程序化发射（AI/自动化用）：等效完成选弹→释放全流程
+        /// </summary>
+        public void FireMarble(MarbleData marble, Vector3 direction, float power01)
+        {
+            if (marble == null || marble.state != MarbleState.Idle)
+            {
+                Debug.LogWarning("FireMarble: marble unavailable!");
+                return;
+            }
+
+            currentMarble = marble;
+            float finalForce = Mathf.Lerp(minShootForce, maxShootForce, Mathf.Clamp01(power01));
+            ShootMarble(marble, direction, finalForce);
+            OnMarbleShot?.Invoke(marble, direction, finalForce);
+            ChangeState(ShootState.Released);
+        }
+
+        /// <summary>
+        /// 获取指定力度档位的出膛速度（m/s），供 AI 弹道计算
+        /// </summary>
+        public float GetLaunchSpeed(float power01)
+        {
+            return Mathf.Lerp(minShootForce, maxShootForce, Mathf.Clamp01(power01));
+        }
+
         /// <summary>
         /// 重置发射器
         /// </summary>

@@ -91,6 +91,9 @@ namespace Dapaolou.Marble
                 // 同一玩家的弹珠碰撞，忽略
                 return;
             }
+
+            // 双方弹珠都会收到碰撞回调，仅由攻击方处理一次，避免重复计分
+            if (marbleData != attacker) return;
             
             // 播放碰撞特效
             PlayHitEffects(contactPoint, impactForce);

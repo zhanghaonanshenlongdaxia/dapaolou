@@ -472,6 +472,9 @@ namespace Dapaolou.Game
         /// </summary>
         private void HandleTowerHit(PlayerData attacker, PlayerData victim, MarbleData towerMarble, float force)
         {
+            // 已摧毁的弹珠不重复判定
+            if (towerMarble == null || towerMarble.state == MarbleState.Destroyed) return;
+
             // 检查是否需要二次打爆
             if (victim.NeedsSecondHit())
             {
@@ -489,10 +492,17 @@ namespace Dapaolou.Game
             }
             else
             {
-                // 一次打爆
-                victim.DestroyTowerMarble(towerMarble);
-                attacker.score += 5;
-                Debug.Log($"Tower marble hit! Player {attacker.playerId} scores 5 points!");
+                // 一次打爆：力度足够才摧毁，否则弹开（与手册判定表一致）
+                if (force > 5f)
+                {
+                    victim.DestroyTowerMarble(towerMarble);
+                    attacker.score += 5;
+                    Debug.Log($"Tower marble destroyed! Player {attacker.playerId} scores 5 points!");
+                }
+                else
+                {
+                    Debug.Log("Hit too weak - marble bounced off!");
+                }
             }
             
             // 检查炮楼是否完全摧毁
@@ -508,6 +518,9 @@ namespace Dapaolou.Game
         /// </summary>
         private void HandleSoldierHit(PlayerData attacker, PlayerData victim, MarbleData soldierMarble, float force)
         {
+            // 已摧毁的弹珠不重复判定
+            if (soldierMarble == null || soldierMarble.state == MarbleState.Destroyed) return;
+
             victim.DestroySoldierMarble(soldierMarble);
             attacker.score += 3;
             attacker.soldiersDestroyed++;
@@ -662,6 +675,11 @@ namespace Dapaolou.Game
         {
             return currentPlayerIndex;
         }
+
+        /// <summary>
+        /// 当前使用的发射器（供 AI / 系统化调用）
+        /// </summary>
+        public MarbleShooter ActiveShooter => marbleShooter;
         
         #endregion
         
