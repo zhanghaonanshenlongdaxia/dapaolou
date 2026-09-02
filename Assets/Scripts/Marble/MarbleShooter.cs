@@ -298,15 +298,31 @@ namespace Dapaolou.Marble
         /// </summary>
         private void UpdateAimVisuals()
         {
-            // 更新瞄准线
+            // 更新瞄准线：台球式贴地辅助线——沿水平瞄准方向采样并投射到地面
             if (aimLine != null)
             {
                 aimLine.enabled = true;
-                aimLine.SetPosition(0, GetShootPosition());
-                
-                // 预测弹珠路径（简单直线）
-                Vector3 endPoint = GetShootPosition() + aimDirection * aimDistance;
-                aimLine.SetPosition(1, endPoint);
+                Vector3 shootPos = GetShootPosition();
+                Vector3 flatDir = new Vector3(aimDirection.x, 0f, aimDirection.z).normalized;
+                if (flatDir.sqrMagnitude < 0.0001f)
+                    flatDir = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
+
+                // 从脚下地面点起步
+                Vector3 cursor = shootPos;
+                if (Physics.Raycast(shootPos, Vector3.down, out var startHit, 2f, groundLayer))
+                    cursor = startHit.point + Vector3.up * 0.03f;
+
+                const int segments = 12;
+                aimLine.positionCount = segments + 1;
+                float curY = cursor.y;
+                for (int i = 0; i <= segments; i++)
+                {
+                    Vector3 p = cursor + flatDir * (aimDistance * i / segments);
+                    if (Physics.Raycast(p + Vector3.up * 1.5f, Vector3.down, out var gh, 3f, groundLayer))
+                        curY = gh.point.y + 0.03f;
+                    p.y = curY;
+                    aimLine.SetPosition(i, p);
+                }
             }
             
             // 更新瞄准点

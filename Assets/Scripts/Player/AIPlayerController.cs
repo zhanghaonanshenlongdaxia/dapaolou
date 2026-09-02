@@ -13,7 +13,7 @@ namespace Dapaolou.Player
     {
         [Header("AI 配置")]
         [SerializeField] private int playerId = 1;              // 控制的玩家ID
-        [SerializeField] private float thinkDelay = 1.2f;       // 思考时间（秒）
+        [SerializeField] private float thinkDelay = 2.5f;       // 思考/瞄准准备时间（秒）
         [SerializeField] private float aimYawError = 1.5f;      // 瞄准横向误差（度）
         [SerializeField] private Vector2 powerRange = new Vector2(0.75f, 1.0f); // 随机力度范围（0-1）
 
@@ -116,6 +116,16 @@ namespace Dapaolou.Player
 
             Debug.Log($"[AI] Player {playerId} fires {marble.name} power={power:F2}");
             shooter.FireMarble(marble, dir, power);
+
+            // 弹珠特写：让人类玩家的镜头短暂跟随这颗弹珠，之后自动恢复第一人称
+            foreach (var pm in FindObjectsOfType<PlayerManager>())
+            {
+                if (pm.IsLocalHuman)
+                {
+                    pm.PlayShotCloseup(marble);
+                    break;
+                }
+            }
         }
     }
 }

@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 using Dapaolou.Marble;
 using Dapaolou.Game;
 
@@ -238,27 +239,36 @@ namespace Dapaolou.Player
         }
 
         /// <summary>
-        /// 观战视角：镜头移到对手身后上方，看着对方瞄准发射（弹珠飞向我方炮楼）
+        /// 弹珠特写：镜头短暂跟随刚射出的弹珠，随后恢复第一人称
         /// </summary>
-        private void EnterSpectateCamera(int watcherIndex)
+        public void PlayShotCloseup(MarbleData marble)
         {
-            if (playerCamera == null) return;
+            if (!isLocalHuman || playerCamera == null || marble == null) return;
+            StartCoroutine(ShotCloseupRoutine(marble));
+        }
 
-            Transform watched = null;
-            foreach (var pm in FindObjectsOfType<PlayerManager>())
-            {
-                if (pm.GetPlayerId() == watcherIndex)
-                {
-                    watched = pm.transform;
-                    break;
-                }
-            }
-            if (watched == null) return;
+        private IEnumerator ShotCloseupRoutine(MarbleData marble)
+        {
+            if (fpsController != null) fpsController.enabled = false;
+
+            var rb = marble.GetComponent<Rigidbody>();
+            Vector3 vdir = (rb != null && rb.velocity.sqrMagnitude > 0.01f)
+                ? rb.velocity.normalized
+                : transform.forward;
 
             playerCamera.transform.SetParent(null);
-            playerCamera.transform.position = watched.position - watched.forward * 2.2f + Vector3.up * 2.0f;
-            playerCamera.transform.LookAt(watched.position + watched.forward * 4f + Vector3.up * 0.3f);
-            isSpectating = true;
+            float t = 0f;
+            while (t < 1.4f && marble != null)
+            {
+                Vector3 mp = marble.transform.position;
+                playerCamera.transform.position = mp - vdir * 0.9f + Vector3.up * 0.45f;
+                playerCamera.transform.LookAt(mp + vdir * 0.6f);
+                t += Time.deltaTime;
+                yield return null;
+            }
+
+            RestoreFirstPersonCamera();
+            if (fpsController != null) fpsController.enabled = true;
         }
 
         /// <summary>
@@ -354,17 +364,11 @@ namespace Dapaolou.Player
             else
             {
                 isMyTurn = false;
-                
-                // 禁用输入
-                if (fpsController != null)
+
+                // 人类玩家保持第一人称且可移动走位，自由观看对手发射；AI 玩家无输入
+                if (!isLocalHuman && fpsController != null)
                 {
                     fpsController.enabled = false;
-                }
-
-                // 轮到对手：进入观战视角，看着对方弹
-                if (isLocalHuman)
-                {
-                    EnterSpectateCamera(playerIndex);
                 }
             }
         }
@@ -451,6 +455,11 @@ namespace Dapaolou.Player
         {
             isLocalHuman = human;
         }
+
+        /// <summary>
+        /// 是否人类玩家
+        /// </summary>
+        public bool IsLocalHuman => isLocalHuman;
         
         /// <summary>
         /// 是否是当前回合
