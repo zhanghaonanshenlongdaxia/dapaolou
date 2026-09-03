@@ -137,7 +137,8 @@ namespace Dapaolou.Game
             {
                 marble.OnDestroyed();
                 towerMarbles.Remove(marble);
-                
+                CleanupMarbleObject(marble);
+
                 if (towerMarbles.Count == 0)
                 {
                     towerDestroyed = true;
@@ -155,7 +156,19 @@ namespace Dapaolou.Game
                 marble.OnDestroyed();
                 soldierMarbles.Remove(marble);
                 soldiersDestroyed++;
+                CleanupMarbleObject(marble);
             }
+        }
+
+        /// <summary>
+        /// 清理被摧毁的弹珠物体：断开关节并延迟销毁（给散架特效留时间）
+        /// </summary>
+        private void CleanupMarbleObject(MarbleData marble)
+        {
+            if (marble == null) return;
+            var joint = marble.GetComponent<FixedJoint>();
+            if (joint != null) UnityEngine.Object.Destroy(joint);
+            UnityEngine.Object.Destroy(marble.gameObject, 0.5f);
         }
         
         /// <summary>

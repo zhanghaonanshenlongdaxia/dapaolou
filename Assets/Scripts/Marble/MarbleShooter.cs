@@ -61,6 +61,7 @@ namespace Dapaolou.Marble
         private MarbleData currentMarble;                           // 当前要发射的弹珠
         private MarbleData aimedMarble;                             // 准星指向的己方弹珠（瞄准哪个弹哪个）
         private MarbleData highlightedMarble;                       // 当前高亮的弹珠
+        private float manualSelectTime = -10f;                      // 滚轮手动选择时间戳
         private float currentChargeTime = 0f;
         private float currentPower = 0f;                            // 当前力度 (0-1)
         private Vector3 aimDirection;                               // 瞄准方向
@@ -175,18 +176,58 @@ namespace Dapaolou.Marble
             UpdateAimDirection();
             UpdateAimVisuals();
             SelectAimedMarble();
-            
+
+            // 滚轮上下切换要弹的小兵
+            float scroll = Input.GetAxis("Mouse ScrollWheel");
+            if (Mathf.Abs(scroll) > 0.01f)
+            {
+                CycleMarble(scroll > 0f ? 1 : -1);
+            }
+
             // 按下鼠标左键开始蓄力
             if (Input.GetMouseButtonDown(0))
             {
                 StartCharging();
             }
-            
+
             // 右键取消
             if (Input.GetMouseButtonDown(1))
             {
                 CancelAiming();
             }
+        }
+
+        /// <summary>
+        /// 滚轮循环切换当前要弹的弹珠，并在短时间内抑制准星自动选择
+        /// </summary>
+        private void CycleMarble(int dir)
+        {
+            var gm = GameManager.Instance;
+            if (gm == null) return;
+            var available = gm.GetCurrentPlayer().GetAvailableMarbles();
+            if (available == null || available.Count == 0) return;
+
+            int idx = available.IndexOf(currentMarble);
+            idx = (idx + dir + available.Count) % available.Count;
+            currentMarble = available[idx];
+            manualSelectTime = Time.time;
+
+            // 高亮与瞄准目标同步到新弹珠
+            aimedMarble = currentMarble;
+            SetHighlight(highlightedMarble, false);
+            SetHighlight(currentMarble, true);
+            highlightedMarble = currentMarble;
+            Debug.Log($"[MarbleShooter] 滚轮切换弹珠 -> {currentMarble.name}");
+        }
+
+        /// <summary>
+        /// 本发射器所属玩家是否当前回合（用于控制辅助线/选弹只在己方回合生效）
+        /// </summary>
+        private bool IsMyTurnToAim()
+        {
+            var gm = GameManager.Instance;
+            var pm = GetComponent<PlayerManager>();
+            return gm != null && pm != null && pm.GetPlayerId() == gm.GetCurrentPlayerIndex();
         }
 
         /// <summary>
@@ -203,6 +244,11 @@ namespace Dapaolou.Marble
                 if (pm != null && pm.GetPlayerId() != gm.GetCurrentPlayerIndex() || playerCamera == null)
                 {
                     aimedMarble = null;
+                }
+                else if (Time.time - manualSelectTime < 1.2f)
+                {
+                    // 滚轮手动选择后短暂抑制准星自动选择，避免高亮被抢走
+                    aimedMarble = currentMarble;
                 }
                 else
                 {
@@ -377,6 +423,14 @@ namespace Dapaolou.Marble
         /// </summary>
         private void UpdateAimVisuals()
         {
+            // 敌人回合/特写镜头期间不显示辅助线：发射器不属于当前回合玩家时直接隐藏
+            if (!IsMyTurnToAim())
+            {
+                if (aimLine != null) aimLine.enabled = false;
+                if (aimTarget != null) aimTarget.gameObject.SetActive(false);
+                return;
+            }
+
             // 更新瞄准线：射线驱动——从要弹的弹珠出发，指向准星射线落点，贴地延伸、到落点即停
             if (aimLine != null)
             {
