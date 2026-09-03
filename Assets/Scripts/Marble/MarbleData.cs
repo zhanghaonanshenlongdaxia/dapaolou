@@ -1,4 +1,5 @@
 using UnityEngine;
+using Dapaolou.Game;
 
 namespace Dapaolou.Marble
 {
@@ -31,6 +32,7 @@ namespace Dapaolou.Marble
         public int ownerPlayerId = 0;           // 所属玩家ID
         public int towerIndex = -1;             // 炮楼中的位置索引（-1表示小兵）
         public int lastAttackerId = -1;         // 攻击链归属：被撞飞后代表哪个玩家（-1=无）
+        public bool pendingCleanup = false;    // 待清理标记（炮楼散架后滚动停止即销毁）
 
         /// <summary>
         /// 有效攻击归属：被撞飞的弹珠代表把它撞飞的玩家（连环碰撞算原攻击者）
@@ -77,6 +79,13 @@ namespace Dapaolou.Marble
 
         void Update()
         {
+            // 待清理（炮楼散架）：滚动停止即从场上移除
+            if (pendingCleanup && state == MarbleState.Idle)
+            {
+                Destroy(gameObject);
+                return;
+            }
+
             // 滚动中的弹珠：低速直接刹停，避免长时间蠕动导致回合等待过久
             if (state == MarbleState.Rolling && rb != null)
             {
@@ -148,8 +157,27 @@ namespace Dapaolou.Marble
         public void OnDestroyed()
         {
             state = MarbleState.Destroyed;
+
+            // 玻璃弹珠散架：断开自身关节，同炮楼的剩余弹珠也断开并标记待清理
+            // （覆盖所有摧毁路径：碰撞/打爆炮楼/拆炮楼）
+            foreach (var j in GetComponents<FixedJoint>())
+                Destroy(j);
+
+            var owner = GameManager.Instance != null
+                ? GameManager.Instance.GetPlayer(ownerPlayerId)
+                : null;
+            if (owner != null && marbleType == MarbleType.Tower)
+            {
+                foreach (var m in owner.towerMarbles)
+                {
+                    if (m == null || m == this) continue;
+                    foreach (var j in m.GetComponents<FixedJoint>())
+                        Destroy(j);
+                    m.pendingCleanup = true;   // 滚动停止后移除
+                }
+            }
+
             // TODO: 播放破碎特效
-            // TODO: 通知GameManager
         }
         
         /// <summary>

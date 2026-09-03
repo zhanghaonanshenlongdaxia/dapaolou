@@ -121,6 +121,12 @@ namespace Dapaolou.Player
             {
                 // 可以用来微调瞄准
             }
+
+            // 屏息：瞄准时按住左 Shift 减少手抖（辅助线更稳）
+            if (tremorSystem != null)
+            {
+                tremorSystem.OnBreathHold(Input.GetKey(KeyCode.LeftShift) && isAiming);
+            }
         }
         
         #endregion

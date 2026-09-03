@@ -456,9 +456,9 @@ namespace Dapaolou.Game
             int attackerId = attacker.GetEffectiveAttackerId();
 
             // 检查是否是不同玩家的弹珠（按有效归属判断）
-            if (attackerId == victim.ownerPlayerId)
+            if (attackerId == victim.GetEffectiveAttackerId())
             {
-                // 不能打自己的弹珠
+                // 不能打自己的弹珠（含被撞飞的己方弹珠弹回）
                 return;
             }
 

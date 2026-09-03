@@ -88,12 +88,8 @@ namespace Dapaolou.Marble
             // 有效攻击归属（连环碰撞：被撞飞的弹珠代表把它撞飞的玩家）
             int attackerId = attacker.GetEffectiveAttackerId();
 
-            // 检查是否是不同玩家的弹珠
-            if (attackerId == victim.ownerPlayerId)
-            {
-                // 同一玩家的弹珠碰撞，忽略
-                return;
-            }
+            // 归属相同（自己人，或被自己弹珠撞飞的弹珠弹回）→ 忽略，避免误毁己方弹珠
+            if (attackerId == victim.GetEffectiveAttackerId()) return;
 
             // 传递攻击链：被撞的弹珠如果再撞坏别人的弹珠，仍算本攻击者的功劳
             victim.lastAttackerId = attackerId;

@@ -187,10 +187,10 @@ namespace Dapaolou.Game
         {
             List<MarbleData> available = new List<MarbleData>();
             
-            // 优先返回小兵
+            // 优先返回小兵（排除待清理的散架弹珠）
             foreach (var soldier in soldierMarbles)
             {
-                if (soldier != null && soldier.state == MarbleState.Idle)
+                if (soldier != null && soldier.state == MarbleState.Idle && !soldier.pendingCleanup)
                 {
                     available.Add(soldier);
                 }
@@ -201,7 +201,7 @@ namespace Dapaolou.Game
             {
                 foreach (var tower in towerMarbles)
                 {
-                    if (tower != null && tower.state == MarbleState.Idle)
+                    if (tower != null && tower.state == MarbleState.Idle && !tower.pendingCleanup)
                     {
                         available.Add(tower);
                     }

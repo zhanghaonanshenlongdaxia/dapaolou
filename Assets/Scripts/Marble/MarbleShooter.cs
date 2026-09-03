@@ -55,6 +55,7 @@ namespace Dapaolou.Marble
         [Header("蓄力仪表盘")]
         [SerializeField] private GameObject powerGauge;             // 蓄力扇形仪表盘（油门盘）
         [SerializeField] private Image powerGaugeFill;              // 蓄力填充扇形
+        [SerializeField] private float pitchAdjustSpeed = 45f;      // 仰角调整速度（度/秒）
 
         // 内部状态
         private ShootState currentState = ShootState.Idle;
@@ -64,6 +65,7 @@ namespace Dapaolou.Marble
         private float manualSelectTime = -10f;                      // 滚轮手动选择时间戳
         private float currentChargeTime = 0f;
         private float currentPower = 0f;                            // 当前力度 (0-1)
+        private float launchPitch = 0f;                             // 起飞仰角（度，0=平射）
         private Vector3 aimDirection;                               // 瞄准方向
         private Vector3 aimHitPoint;                                // 瞄准命中点
         private bool isChargingForward = true;                      // 力度条方向
@@ -173,6 +175,9 @@ namespace Dapaolou.Marble
         
         private void UpdateAiming()
         {
+            // 敌人回合时本发射器不参与瞄准（辅助线/高亮/输入全部关闭）
+            if (!IsMyTurnToAim()) return;
+
             UpdateAimDirection();
             UpdateAimVisuals();
             SelectAimedMarble();
@@ -307,10 +312,23 @@ namespace Dapaolou.Marble
         
         private void UpdateCharging()
         {
+            // 蓄力时 W/S 调整起飞仰角（0~85°，向上抛射过障碍）
+            if (Input.GetKey(KeyCode.W))
+                launchPitch = Mathf.Min(launchPitch + pitchAdjustSpeed * Time.deltaTime, 85f);
+            if (Input.GetKey(KeyCode.S))
+                launchPitch = Mathf.Max(launchPitch - pitchAdjustSpeed * Time.deltaTime, 0f);
+
             // 继续更新瞄准方向（手抖会影响）
             UpdateAimDirection();
+            // 应用起飞仰角：水平瞄准方向抬升 launchPitch
+            Vector3 flat = new Vector3(aimDirection.x, 0f, aimDirection.z);
+            if (flat.sqrMagnitude > 0.0001f)
+            {
+                flat.Normalize();
+                aimDirection = (flat + Vector3.up * Mathf.Tan(launchPitch * Mathf.Deg2Rad)).normalized;
+            }
             UpdateAimVisuals();
-            
+
             // 高尔夫式蓄力
             if (useGolfStyleBounce)
             {
