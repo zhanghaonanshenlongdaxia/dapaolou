@@ -501,7 +501,7 @@ rembg_remove(cat_portrait.png, cat_portrait_alpha.png)
 >
 > 文件内容格式：
 > `env
-> SEEDREAM_API_KEY=ark-****（Key 在本地 .env，勿写入文档）
+> SEEDREAM_API_KEY=your_api_key_here
 > `
 >
 > 脚本读取方式：open(".env").read().split("=", 1)[1].strip()
