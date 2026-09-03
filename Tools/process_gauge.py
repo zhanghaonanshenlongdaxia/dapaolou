@@ -22,6 +22,7 @@ for y in range(0, h, 2):
 
 cx, cy = (minx + maxx) // 2, (miny + maxy) // 2
 radius = max(maxx - minx, maxy - miny) // 2
+radius -= 30   # 收紧：去掉表盘外的白色残留边缘
 print(f"dial center=({cx},{cy}) radius={radius}")
 
 # 圆形遮罩（边缘 3px 羽化）+ 裁剪到正方形

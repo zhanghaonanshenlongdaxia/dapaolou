@@ -143,6 +143,32 @@ namespace Dapaolou.Player
                 yield break;
             }
             var marble = marbles[0];
+            var enemy = gm.GetPlayer((playerId + 1) % 2);
+            if (enemy == null) yield break;
+
+            // 走到要弹的弹珠正后方蹲点瞄准（弹哪个就停在哪个后面，不乱停）
+            Vector3 aimFlat = enemy.towerCenter - marble.transform.position;
+            aimFlat.y = 0f;
+            Vector3 behindSpot = marble.transform.position - aimFlat.normalized * 0.9f;
+            float wt = 0f;
+            while ((transform.position - behindSpot).magnitude > 0.12f && wt < 3f && turnActive)
+            {
+                Vector3 flatDelta = behindSpot - transform.position;
+                flatDelta.y = 0f;
+                Vector3 desired = flatDelta.normalized;
+                moveDir = Vector3.Slerp(moveDir, desired, Time.deltaTime * 4f).normalized;
+                Vector3 step = moveDir * 1.1f * Time.deltaTime + Physics.gravity * Time.deltaTime;
+                if (cc != null) cc.Move(step);
+                else transform.position += step;
+                transform.rotation = Quaternion.Slerp(transform.rotation,
+                    Quaternion.LookRotation(moveDir), Time.deltaTime * 6f);
+                wt += Time.deltaTime;
+                yield return null;
+            }
+            // 站定后转身面向瞄准方向
+            transform.rotation = Quaternion.LookRotation(aimFlat.normalized);
+            yield return new WaitForSeconds(0.4f);
+            if (!turnActive) yield break;
 
             // 随机力度
             float power = Random.Range(powerRange.x, powerRange.y);
@@ -156,8 +182,6 @@ namespace Dapaolou.Player
             }
 
             // 瞄准敌方炮楼：弹道仰角补偿重力下坠，并额外 +1.5m 距离补偿空气阻力造成的射程衰减
-            var enemy = gm.GetPlayer((playerId + 1) % 2);
-            if (enemy == null) yield break;
             Vector3 toTarget = enemy.towerCenter - marble.transform.position;
             float dist = new Vector3(toTarget.x, 0f, toTarget.z).magnitude;
             float speed = shooter.GetLaunchSpeed(power);
