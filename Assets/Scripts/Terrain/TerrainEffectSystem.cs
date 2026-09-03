@@ -10,7 +10,8 @@ namespace Dapaolou.Terrain
         Cement,         // 水泥地 - 正常
         Dirt,           // 泥土地 - 坑洼、上坡
         Grass,          // 草堆 - 减速
-        LooseSand       // 松散土地 - 上坡、容易陷住
+        LooseSand,      // 松散土地 - 上坡、容易陷住
+        Puddle          // 水坑 - 大幅减速（新增）
     }
 
     /// <summary>
@@ -82,6 +83,32 @@ namespace Dapaolou.Terrain
             stuckChance = 0.3f,
             stuckDuration = 3f
         };
+
+        [SerializeField] private TerrainEffectConfig puddleConfig = new TerrainEffectConfig
+        {
+            terrainType = TerrainType.Puddle,
+            frictionMultiplier = 2.4f,
+            bouncinessMultiplier = 0.2f,
+            speedMultiplier = 0.45f,
+            canStuck = false,
+            stuckChance = 0f
+        };
+
+        /// <summary>
+        /// 各地形的滚动阻力（rb.drag），供弹珠状态机查询
+        /// </summary>
+        public static float GetDragFor(TerrainType type)
+        {
+            switch (type)
+            {
+                case TerrainType.Cement: return 0.5f;
+                case TerrainType.Dirt: return 0.8f;
+                case TerrainType.Grass: return 1.6f;
+                case TerrainType.LooseSand: return 2.6f;
+                case TerrainType.Puddle: return 3.2f;
+                default: return 0.5f;
+            }
+        }
         
         [Header("地形检测")]
         [SerializeField] private LayerMask terrainLayer;
@@ -107,11 +134,11 @@ namespace Dapaolou.Terrain
         /// </summary>
         public TerrainType GetTerrainType(Vector3 position)
         {
-            // 向下发射射线检测地形
+            // 向下发射射线检测地形（长度覆盖高处调用，如从 1m 高俯视检测）
             Ray ray = new Ray(position + Vector3.up * checkHeight, Vector3.down);
             RaycastHit hit;
-            
-            if (Physics.Raycast(ray, out hit, checkHeight * 2, terrainLayer))
+
+            if (Physics.Raycast(ray, out hit, checkHeight * 2 + 1.5f, terrainLayer))
             {
                 // 根据地形Tag或组件判断类型
                 TerrainTag terrainTag = hit.collider.GetComponent<TerrainTag>();
@@ -147,6 +174,8 @@ namespace Dapaolou.Terrain
                     return grassConfig;
                 case TerrainType.LooseSand:
                     return looseSandConfig;
+                case TerrainType.Puddle:
+                    return puddleConfig;
                 default:
                     return cementConfig;
             }

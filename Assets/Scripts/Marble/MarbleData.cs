@@ -51,6 +51,8 @@ namespace Dapaolou.Marble
         
         private Rigidbody rb;
         private Vector3 initialPosition;
+        private float terrainCheckTimer = 0f;
+        private Terrain.TerrainType currentTerrain = Terrain.TerrainType.Cement;
         
         void Awake()
         {
@@ -89,6 +91,23 @@ namespace Dapaolou.Marble
                 {
                     // 滚出场地坠落：回收到出生点，避免回合永久卡死
                     ResetToInitial();
+                }
+                else
+                {
+                    // 地形检测（0.15s 一次）：按脚下地形设置滚动阻力；入水瞬间骤减
+                    terrainCheckTimer -= Time.deltaTime;
+                    if (terrainCheckTimer <= 0f && Terrain.TerrainEffectSystem.Instance != null)
+                    {
+                        terrainCheckTimer = 0.15f;
+                        var t = Terrain.TerrainEffectSystem.Instance.GetTerrainType(transform.position);
+                        if (t != currentTerrain)
+                        {
+                            if (t == Terrain.TerrainType.Puddle)
+                                rb.velocity *= 0.5f;    // 入水骤减
+                            currentTerrain = t;
+                            rb.drag = Terrain.TerrainEffectSystem.GetDragFor(t);
+                        }
+                    }
                 }
             }
         }

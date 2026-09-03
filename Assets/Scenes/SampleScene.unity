@@ -382,7 +382,6 @@ MonoBehaviour:
   tremorIndicator: {fileID: 0}
   powerGauge: {fileID: 0}
   powerGaugeFill: {fileID: 0}
-  needleTransform: {fileID: 0}
 --- !u!114 &86629346
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1144,7 +1143,7 @@ MonoBehaviour:
   m_FillCenter: 1
   m_FillMethod: 4
   m_FillAmount: 0
-  m_FillClockwise: 0
+  m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
@@ -2376,7 +2375,6 @@ MonoBehaviour:
   tremorIndicator: {fileID: 0}
   powerGauge: {fileID: 2071314411}
   powerGaugeFill: {fileID: 421524404}
-  needleTransform: {fileID: 0}
 --- !u!114 &1645713503
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3252,7 +3250,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &2071314412
 RectTransform:
   m_ObjectHideFlags: 0
