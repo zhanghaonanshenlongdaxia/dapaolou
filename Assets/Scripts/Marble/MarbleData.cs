@@ -80,6 +80,13 @@ namespace Dapaolou.Marble
 
         void Update()
         {
+            // 待清理（炮楼散架）：速度低于阈值即从场上移除（无论 state 是 Idle 还是蠕动中的低速滑动）
+            if (pendingCleanup && rb != null && rb.velocity.magnitude < 0.3f)
+            {
+                Destroy(gameObject);
+                return;
+            }
+
             // 已摧毁的弹珠：保持物理滚动/弹跳，滚停后从场上移除（超时 5s 强制）
             if (state == MarbleState.Destroyed && rb != null)
             {
