@@ -98,13 +98,13 @@ namespace Dapaolou.UI
                 var p = gameManager.GetPlayer(i);
                 if (p != null) players.Add(p);
             }
-            players.Sort((a, b) => b.marbleStock.CompareTo(a.marbleStock));
+            players.Sort((a, b) => b.totalMarbles.CompareTo(a.totalMarbles));
 
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine("弹珠排行榜");
+            sb.AppendLine("弹珠排行榜（总/本局）");
             for (int i = 0; i < players.Count; i++)
             {
-                sb.AppendLine($"{i + 1}. 玩家{players[i].playerId + 1}  {players[i].marbleStock}颗");
+                sb.AppendLine($"{i + 1}. 玩家{players[i].playerId + 1}  {players[i].totalMarbles}颗 / 本局{players[i].roundMarbles}颗");
             }
             rankingText.text = sb.ToString();
         }

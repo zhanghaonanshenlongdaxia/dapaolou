@@ -30,6 +30,15 @@ namespace Dapaolou.Marble
         public MarbleType marbleType = MarbleType.Soldier;
         public int ownerPlayerId = 0;           // 所属玩家ID
         public int towerIndex = -1;             // 炮楼中的位置索引（-1表示小兵）
+        public int lastAttackerId = -1;         // 攻击链归属：被撞飞后代表哪个玩家（-1=无）
+
+        /// <summary>
+        /// 有效攻击归属：被撞飞的弹珠代表把它撞飞的玩家（连环碰撞算原攻击者）
+        /// </summary>
+        public int GetEffectiveAttackerId()
+        {
+            return lastAttackerId >= 0 ? lastAttackerId : ownerPlayerId;
+        }
         
         [Header("当前状态")]
         public MarbleState state = MarbleState.Idle;
@@ -74,6 +83,7 @@ namespace Dapaolou.Marble
                     rb.velocity = Vector3.zero;
                     rb.angularVelocity = Vector3.zero;
                     state = MarbleState.Idle;
+                    lastAttackerId = -1;     // 停下后攻击链结束
                 }
                 else if (transform.position.y < -2f)
                 {

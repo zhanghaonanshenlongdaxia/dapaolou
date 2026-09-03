@@ -28,7 +28,8 @@ namespace Dapaolou.Game
         [Header("状态")]
         public PlayerState state = PlayerState.Waiting;
         public int score = 0;
-        public int marbleStock = 21;        // 弹珠库存（开局每人 21 颗）
+        public int totalMarbles = 21;       // 总弹珠数（跨局身家：摧毁时易主，开局不扣）
+        public int roundMarbles = 0;         // 当前局弹珠数（开局重置为 7 入场，本局摧毁实时增减）
         
         [Header("炮楼")]
         public List<MarbleData> towerMarbles = new List<MarbleData>();

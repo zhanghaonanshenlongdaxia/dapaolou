@@ -265,11 +265,11 @@ namespace Dapaolou.Game
         {
             currentPhase = GamePhase.Playing;
 
-            // 开一局每人扣 7 颗弹珠（4 炮楼 + 3 小兵入场）
+            // 开局：每人的当前局弹珠数重置为 7 颗入场（4 炮楼 + 3 小兵），总弹珠数不扣
             for (int i = 0; i < players.Count; i++)
             {
-                players[i].marbleStock -= 7;
-                Debug.Log($"Player {i} pays 7 marbles to enter, stock={players[i].marbleStock}");
+                players[i].roundMarbles = 7;
+                Debug.Log($"Player {i} enters round with 7 marbles (total={players[i].totalMarbles})");
             }
 
             StartPlayerTurn(GetFirstPlayerInOrder());
@@ -451,15 +451,18 @@ namespace Dapaolou.Game
         public void OnMarbleCollision(MarbleData attacker, MarbleData victim, float impactForce)
         {
             if (attacker == null || victim == null) return;
-            
-            // 检查是否是不同玩家的弹珠
-            if (attacker.ownerPlayerId == victim.ownerPlayerId)
+
+            // 有效攻击归属：连环碰撞中被撞飞的弹珠仍代表原始攻击者
+            int attackerId = attacker.GetEffectiveAttackerId();
+
+            // 检查是否是不同玩家的弹珠（按有效归属判断）
+            if (attackerId == victim.ownerPlayerId)
             {
                 // 不能打自己的弹珠
                 return;
             }
-            
-            PlayerData attackerPlayer = players[attacker.ownerPlayerId];
+
+            PlayerData attackerPlayer = players[attackerId];
             PlayerData victimPlayer = players[victim.ownerPlayerId];
             
             // 根据弹珠类型处理
@@ -491,9 +494,11 @@ namespace Dapaolou.Game
                 {
                     victim.DestroyTowerMarble(towerMarble);
                     attacker.score += 10;
-                    // 弹珠转移：被打掉炮楼弹珠，拥有者 -4，攻击者 +4
-                    victim.marbleStock -= 4;
-                    attacker.marbleStock += 4;
+                    // 弹珠转移：总弹珠易主，本局战况同步
+                    victim.totalMarbles -= 4;
+                    attacker.totalMarbles += 4;
+                    victim.roundMarbles -= 4;
+                    attacker.roundMarbles += 4;
                     Debug.Log($"Tower marble destroyed! Player {attacker.playerId} scores 10 points! (+4 marbles)");
                 }
                 else
@@ -508,9 +513,11 @@ namespace Dapaolou.Game
                 {
                     victim.DestroyTowerMarble(towerMarble);
                     attacker.score += 5;
-                    // 弹珠转移：被打掉炮楼弹珠，拥有者 -4，攻击者 +4
-                    victim.marbleStock -= 4;
-                    attacker.marbleStock += 4;
+                    // 弹珠转移：总弹珠易主，本局战况同步
+                    victim.totalMarbles -= 4;
+                    attacker.totalMarbles += 4;
+                    victim.roundMarbles -= 4;
+                    attacker.roundMarbles += 4;
                     Debug.Log($"Tower marble destroyed! Player {attacker.playerId} scores 5 points! (+4 marbles)");
                 }
                 else
@@ -538,9 +545,11 @@ namespace Dapaolou.Game
             victim.DestroySoldierMarble(soldierMarble);
             attacker.score += 3;
             attacker.soldiersDestroyed++;
-            // 弹珠转移：被打掉小兵弹珠，拥有者 -1，攻击者 +1
-            victim.marbleStock -= 1;
-            attacker.marbleStock += 1;
+            // 弹珠转移：总弹珠易主，本局战况同步
+            victim.totalMarbles -= 1;
+            attacker.totalMarbles += 1;
+            victim.roundMarbles -= 1;
+            attacker.roundMarbles += 1;
             
             Debug.Log($"Soldier destroyed! Player {attacker.playerId} scores 3 points! (+1 marble)");
             
