@@ -42,11 +42,15 @@ namespace Dapaolou.UI
         [SerializeField] private GameObject gameOverPanel;
         [SerializeField] private TextMeshProUGUI winnerText;
         [SerializeField] private Button restartButton;
+
+        [Header("排行榜")]
+        [SerializeField] private TextMeshProUGUI rankingText;    // 弹珠排行榜文本
         
         // 内部状态
         private GameManager gameManager;
         private MarbleShooter marbleShooter;
         private HandTremorSystem tremorSystem;
+        private float rankingRefreshTimer = 0f;
         
         void Awake()
         {
@@ -72,6 +76,37 @@ namespace Dapaolou.UI
             UpdateTurnTimer();
             UpdateTremorIndicator();
             UpdatePowerBar();
+            UpdateRanking();
+        }
+
+        /// <summary>
+        /// 刷新弹珠排行榜：按库存降序列出所有玩家
+        /// </summary>
+        private void UpdateRanking()
+        {
+            if (rankingText == null || gameManager == null) return;
+            if (rankingRefreshTimer > 0f)
+            {
+                rankingRefreshTimer -= Time.deltaTime;
+                return;
+            }
+            rankingRefreshTimer = 0.5f;
+
+            var players = new System.Collections.Generic.List<PlayerData>();
+            for (int i = 0; i < 2; i++)
+            {
+                var p = gameManager.GetPlayer(i);
+                if (p != null) players.Add(p);
+            }
+            players.Sort((a, b) => b.marbleStock.CompareTo(a.marbleStock));
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("弹珠排行榜");
+            for (int i = 0; i < players.Count; i++)
+            {
+                sb.AppendLine($"{i + 1}. 玩家{players[i].playerId + 1}  {players[i].marbleStock}颗");
+            }
+            rankingText.text = sb.ToString();
         }
         
         #region 初始化

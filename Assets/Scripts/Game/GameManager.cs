@@ -264,6 +264,14 @@ namespace Dapaolou.Game
         public void StartGame()
         {
             currentPhase = GamePhase.Playing;
+
+            // 开一局每人扣 7 颗弹珠（4 炮楼 + 3 小兵入场）
+            for (int i = 0; i < players.Count; i++)
+            {
+                players[i].marbleStock -= 7;
+                Debug.Log($"Player {i} pays 7 marbles to enter, stock={players[i].marbleStock}");
+            }
+
             StartPlayerTurn(GetFirstPlayerInOrder());
         }
 
@@ -483,7 +491,10 @@ namespace Dapaolou.Game
                 {
                     victim.DestroyTowerMarble(towerMarble);
                     attacker.score += 10;
-                    Debug.Log($"Tower marble destroyed! Player {attacker.playerId} scores 10 points!");
+                    // 弹珠转移：被打掉炮楼弹珠，拥有者 -4，攻击者 +4
+                    victim.marbleStock -= 4;
+                    attacker.marbleStock += 4;
+                    Debug.Log($"Tower marble destroyed! Player {attacker.playerId} scores 10 points! (+4 marbles)");
                 }
                 else
                 {
@@ -497,7 +508,10 @@ namespace Dapaolou.Game
                 {
                     victim.DestroyTowerMarble(towerMarble);
                     attacker.score += 5;
-                    Debug.Log($"Tower marble destroyed! Player {attacker.playerId} scores 5 points!");
+                    // 弹珠转移：被打掉炮楼弹珠，拥有者 -4，攻击者 +4
+                    victim.marbleStock -= 4;
+                    attacker.marbleStock += 4;
+                    Debug.Log($"Tower marble destroyed! Player {attacker.playerId} scores 5 points! (+4 marbles)");
                 }
                 else
                 {
@@ -524,8 +538,11 @@ namespace Dapaolou.Game
             victim.DestroySoldierMarble(soldierMarble);
             attacker.score += 3;
             attacker.soldiersDestroyed++;
+            // 弹珠转移：被打掉小兵弹珠，拥有者 -1，攻击者 +1
+            victim.marbleStock -= 1;
+            attacker.marbleStock += 1;
             
-            Debug.Log($"Soldier destroyed! Player {attacker.playerId} scores 3 points!");
+            Debug.Log($"Soldier destroyed! Player {attacker.playerId} scores 3 points! (+1 marble)");
             
             // 如果小兵全灭，检查是否可以拆炮楼
             if (victim.GetAliveSoldierCount() == 0)

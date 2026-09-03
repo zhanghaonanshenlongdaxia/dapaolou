@@ -28,6 +28,7 @@ namespace Dapaolou.Game
         [Header("状态")]
         public PlayerState state = PlayerState.Waiting;
         public int score = 0;
+        public int marbleStock = 21;        // 弹珠库存（开局每人 21 颗）
         
         [Header("炮楼")]
         public List<MarbleData> towerMarbles = new List<MarbleData>();

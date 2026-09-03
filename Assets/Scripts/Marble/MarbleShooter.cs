@@ -200,30 +200,32 @@ namespace Dapaolou.Marble
             {
                 // 仅当前回合玩家的发射器做准星选弹（AI 回合时该发射器归 AI，不做准星高亮）
                 var pm = GetComponent<PlayerManager>();
-                if (pm != null && pm.GetPlayerId() != gm.GetCurrentPlayerIndex())
+                if (pm != null && pm.GetPlayerId() != gm.GetCurrentPlayerIndex() || playerCamera == null)
                 {
                     aimedMarble = null;
                 }
                 else
                 {
                     var player = gm.GetCurrentPlayer();
-                    Ray ray = playerCamera != null
-                        ? playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f))
-                        : new Ray(transform.position + Vector3.up * 1.6f, transform.forward);
-
+                    // 屏幕空间判定：弹珠投影离屏幕中心的距离（以屏高为 1），
+                    // 远近一致、符合准星直觉：指到弹珠上才高亮，偏离即不高亮
+                    const float threshold = 0.07f;
+                    float aspect = playerCamera.aspect;
                     MarbleData best = null;
                     float bestDist = float.MaxValue;
                     foreach (var m in player.GetAvailableMarbles())
                     {
                         if (m == null) continue;
-                        Vector3 toM = m.transform.position - ray.origin;
-                        float along = Vector3.Dot(toM, ray.direction);
-                        if (along < 0f || along > aimDistance + 2f) continue;
-                        float perp = Vector3.Cross(ray.direction, toM).magnitude;
-                        if (perp < 0.22f && along < bestDist)
+                        Vector3 vp = playerCamera.WorldToViewportPoint(m.transform.position);
+                        if (vp.z <= 0.4f) continue;   // 相机后方或太近
+                        if (vp.x < 0f || vp.x > 1f || vp.y < 0f || vp.y > 1f) continue; // 屏幕外
+                        float dx = (vp.x - 0.5f) * aspect;
+                        float dy = vp.y - 0.5f;
+                        float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                        if (dist < threshold && dist < bestDist)
                         {
                             best = m;
-                            bestDist = along;
+                            bestDist = dist;
                         }
                     }
                     aimedMarble = best;

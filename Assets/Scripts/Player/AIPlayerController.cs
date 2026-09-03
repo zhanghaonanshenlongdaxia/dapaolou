@@ -78,6 +78,8 @@ namespace Dapaolou.Player
             float thinkTime = Random.Range(thinkDelayRange.x, thinkDelayRange.y);
             float elapsed = 0f;
             Vector3 wanderTarget = transform.position;
+            Vector3 moveDir = Vector3.zero;        // 平滑移动方向
+            float pauseTimer = 0.5f;                // 初始先张望一下
             var cc = GetComponent<CharacterController>();
             var enemyPreview = gm.GetPlayer((playerId + 1) % 2);
             Vector3 aimPreviewDir = enemyPreview != null
@@ -86,30 +88,46 @@ namespace Dapaolou.Player
 
             while (elapsed < thinkTime && turnActive && gm.GetCurrentPhase() == GamePhase.Playing)
             {
-                // 走位：到达附近随机点后换下一个
                 Vector3 flatDelta = wanderTarget - transform.position;
                 flatDelta.y = 0f;
-                if (flatDelta.magnitude < 0.15f)
-                {
-                    wanderTarget = transform.position +
-                        new Vector3(Random.Range(-1.2f, 1.2f), 0f, Random.Range(-0.6f, 0.6f));
-                }
 
-                if (flatDelta.magnitude > 0.05f)
+                if (pauseTimer > 0f)
                 {
-                    Vector3 step = flatDelta.normalized * 1.0f * Time.deltaTime;
-                    if (cc != null) cc.Move(step);
-                    else transform.position += step;
-                    transform.rotation = Quaternion.Slerp(transform.rotation,
-                        Quaternion.LookRotation(flatDelta.normalized), Time.deltaTime * 4f);
-                }
-                else
-                {
-                    // 原地左右张望（反复找角度）
-                    float sway = Mathf.Sin(elapsed * 2.5f) * 12f;
+                    // 停顿张望：原地左右看，模拟反复找角度
+                    pauseTimer -= Time.deltaTime;
+                    moveDir = Vector3.Slerp(moveDir, Vector3.zero, Time.deltaTime * 6f);
+                    float sway = Mathf.Sin(elapsed * 2.5f) * 14f;
                     Vector3 lookDir = Quaternion.AngleAxis(sway, Vector3.up) * aimPreviewDir;
                     transform.rotation = Quaternion.Slerp(transform.rotation,
                         Quaternion.LookRotation(lookDir), Time.deltaTime * 5f);
+
+                    if (pauseTimer <= 0f && flatDelta.magnitude < 0.5f)
+                    {
+                        // 张望结束：选下一个至少 0.5m 外的走位点
+                        Vector3 offset;
+                        int guard = 0;
+                        do
+                        {
+                            offset = new Vector3(Random.Range(-1.4f, 1.4f), 0f, Random.Range(-0.8f, 0.8f));
+                        } while (offset.magnitude < 0.5f && ++guard < 10);
+                        wanderTarget = transform.position + offset;
+                    }
+                }
+                else if (flatDelta.magnitude > 0.18f)
+                {
+                    // 平滑移动：方向渐变转身先行 + 重力贴地，杜绝瞬移感
+                    Vector3 desired = flatDelta.normalized;
+                    moveDir = Vector3.Slerp(moveDir, desired, Time.deltaTime * 3f).normalized;
+                    Vector3 step = moveDir * 1.1f * Time.deltaTime + Physics.gravity * Time.deltaTime;
+                    if (cc != null) cc.Move(step);
+                    else transform.position += step;
+                    transform.rotation = Quaternion.Slerp(transform.rotation,
+                        Quaternion.LookRotation(moveDir), Time.deltaTime * 6f);
+                }
+                else
+                {
+                    // 到点：停顿张望一会儿再走下一个点
+                    pauseTimer = Random.Range(0.4f, 0.9f);
                 }
 
                 elapsed += Time.deltaTime;
