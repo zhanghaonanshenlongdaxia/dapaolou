@@ -188,6 +188,9 @@ namespace Dapaolou.Marble
                     m.pendingCleanup = true;   // 滚动停止后移除
                     m.destroyedAt = Time.time;  // 散架弹珠的超时计时起点
                 }
+
+                // 打掉一颗 = 整塔报废（打散了四颗都要消失）
+                owner.towerDestroyed = true;
             }
 
             // TODO: 播放破碎特效
