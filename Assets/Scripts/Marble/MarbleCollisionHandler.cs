@@ -167,9 +167,46 @@ namespace Dapaolou.Marble
             
             // 标记为销毁
             marble.OnDestroyed();
-            
+
+            // 玻璃弹珠散架：断开整座炮楼的 FixedJoint 并从爆点向外散开
+            ScatterTower(marble, impactForce);
+
             // 延迟销毁对象
             Destroy(marble.gameObject, 0.5f);
+        }
+
+        /// <summary>
+        /// 炮楼散架：被打掉一颗后，剩余弹珠的 FixedJoint 全部断开并施加散开冲击
+        /// </summary>
+        private void ScatterTower(MarbleData destroyed, float impactForce)
+        {
+            if (GameManager.Instance == null) return;
+            var owner = GameManager.Instance.GetPlayer(destroyed.ownerPlayerId);
+            if (owner == null || owner.towerMarbles == null) return;
+
+            Vector3 epicenter = destroyed.transform.position;
+            float scatter = Mathf.Clamp(impactForce * 0.12f, 0.8f, 2.5f);
+
+            foreach (var m in owner.towerMarbles)
+            {
+                if (m == null || m == destroyed || m.state == MarbleState.Destroyed) continue;
+
+                // 断开剩余弹珠之间的关节
+                var joint = m.GetComponent<FixedJoint>();
+                if (joint != null) Destroy(joint);
+
+                // 从被摧毁点向外弹开
+                var rb = m.GetComponent<Rigidbody>();
+                if (rb != null)
+                {
+                    Vector3 dir = (m.transform.position - epicenter).normalized + Vector3.up * 0.6f;
+                    rb.AddForce(dir.normalized * scatter, ForceMode.VelocityChange);
+                }
+            }
+
+            // 被摧毁弹珠自身的关节也断开
+            var ownJoint = destroyed.GetComponent<FixedJoint>();
+            if (ownJoint != null) Destroy(ownJoint);
         }
         
         /// <summary>

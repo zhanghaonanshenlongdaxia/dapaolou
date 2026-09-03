@@ -151,6 +151,9 @@ namespace Dapaolou.Game
                 }
             }
             
+            // 玻璃质感材质
+            marbleObj.GetComponent<Renderer>().material = MarbleData.CreateGlassMaterial(Color.white);
+
             // 添加弹珠数据组件
             MarbleData marbleData = marbleObj.GetComponent<MarbleData>();
             if (marbleData == null)
@@ -179,7 +182,9 @@ namespace Dapaolou.Game
                 Renderer renderer = marble.GetComponent<Renderer>();
                 if (renderer != null)
                 {
-                    renderer.material.color = color;
+                    Color c = color;
+                    c.a = 0.65f;    // 玻璃半透明
+                    renderer.material.SetColor("_BaseColor", c);
                 }
             }
         }

@@ -124,6 +124,29 @@ namespace Dapaolou.Marble
         }
         
         /// <summary>
+        /// 创建玻璃质感弹珠材质（半透明 + 高光滑度）
+        /// </summary>
+        public static Material CreateGlassMaterial(Color tint)
+        {
+            var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            Color c = tint;
+            c.a = 0.65f;
+            mat.SetColor("_BaseColor", c);
+            mat.SetFloat("_Metallic", 0.05f);
+            mat.SetFloat("_Smoothness", 0.92f);
+            // 半透明表面
+            mat.SetFloat("_Surface", 1f);
+            mat.SetFloat("_Blend", 0f);
+            mat.SetOverrideTag("RenderType", "Transparent");
+            mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            mat.SetInt("_ZWrite", 0);
+            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            return mat;
+        }
+
+        /// <summary>
         /// 重置到初始位置
         /// </summary>
         public void ResetToInitial()

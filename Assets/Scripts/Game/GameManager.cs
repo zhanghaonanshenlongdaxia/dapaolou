@@ -234,9 +234,9 @@ namespace Dapaolou.Game
             marbleData.towerIndex = -1;
             marbleObj.AddComponent<MarbleCollisionHandler>();
             
-            // 设置颜色
+            // 玻璃质感 + 玩家色
             Renderer renderer = marbleObj.GetComponent<Renderer>();
-            renderer.material.color = playerColors[playerId];
+            renderer.material = MarbleData.CreateGlassMaterial(playerColors[playerId]);
             
             // 设置名称
             marbleObj.name = $"Player{playerId}_Soldier_{index}";

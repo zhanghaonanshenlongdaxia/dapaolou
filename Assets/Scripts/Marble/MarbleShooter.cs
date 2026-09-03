@@ -207,25 +207,21 @@ namespace Dapaolou.Marble
                 else
                 {
                     var player = gm.GetCurrentPlayer();
-                    // 屏幕空间判定：弹珠投影离屏幕中心的距离（以屏高为 1），
-                    // 远近一致、符合准星直觉：指到弹珠上才高亮，偏离即不高亮
-                    const float threshold = 0.07f;
-                    float aspect = playerCamera.aspect;
+                    var available = player.GetAvailableMarbles();
+                    // 准星粗射线物理判定：SphereCast（半径 6cm）真实碰到哪颗己方弹珠就选哪颗，
+                    // 左右/前后天然准确——指到弹珠上才算命中，不受距离/屏幕投影失真影响
+                    Ray ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+                    var hits = Physics.SphereCastAll(ray, 0.06f, 15f);
                     MarbleData best = null;
                     float bestDist = float.MaxValue;
-                    foreach (var m in player.GetAvailableMarbles())
+                    foreach (var h in hits)
                     {
-                        if (m == null) continue;
-                        Vector3 vp = playerCamera.WorldToViewportPoint(m.transform.position);
-                        if (vp.z <= 0.4f) continue;   // 相机后方或太近
-                        if (vp.x < 0f || vp.x > 1f || vp.y < 0f || vp.y > 1f) continue; // 屏幕外
-                        float dx = (vp.x - 0.5f) * aspect;
-                        float dy = vp.y - 0.5f;
-                        float dist = Mathf.Sqrt(dx * dx + dy * dy);
-                        if (dist < threshold && dist < bestDist)
+                        var md = h.collider.GetComponent<MarbleData>();
+                        if (md == null || !available.Contains(md)) continue;
+                        if (h.distance < bestDist)
                         {
-                            best = m;
-                            bestDist = dist;
+                            best = md;
+                            bestDist = h.distance;
                         }
                     }
                     aimedMarble = best;
