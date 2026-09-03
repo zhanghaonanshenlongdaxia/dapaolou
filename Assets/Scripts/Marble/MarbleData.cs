@@ -55,6 +55,7 @@ namespace Dapaolou.Marble
         private Vector3 initialPosition;
         private float terrainCheckTimer = 0f;
         private Terrain.TerrainType currentTerrain = Terrain.TerrainType.Cement;
+        private float destroyedAt = -1f;        // 被摧毁的时刻（滚停后移除用）
         
         void Awake()
         {
@@ -79,10 +80,13 @@ namespace Dapaolou.Marble
 
         void Update()
         {
-            // 待清理（炮楼散架）：滚动停止即从场上移除
-            if (pendingCleanup && state == MarbleState.Idle)
+            // 已摧毁的弹珠：保持物理滚动/弹跳，滚停后从场上移除（超时 5s 强制）
+            if (state == MarbleState.Destroyed && rb != null)
             {
-                Destroy(gameObject);
+                if (rb.velocity.magnitude < 0.3f || Time.time - destroyedAt > 5f)
+                {
+                    Destroy(gameObject);
+                }
                 return;
             }
 
@@ -157,6 +161,7 @@ namespace Dapaolou.Marble
         public void OnDestroyed()
         {
             state = MarbleState.Destroyed;
+            destroyedAt = Time.time;
 
             // 玻璃弹珠散架：断开自身关节，同炮楼的剩余弹珠也断开并标记待清理
             // （覆盖所有摧毁路径：碰撞/打爆炮楼/拆炮楼）
@@ -174,6 +179,7 @@ namespace Dapaolou.Marble
                     foreach (var j in m.GetComponents<FixedJoint>())
                         Destroy(j);
                     m.pendingCleanup = true;   // 滚动停止后移除
+                    m.destroyedAt = Time.time;  // 散架弹珠的超时计时起点
                 }
             }
 

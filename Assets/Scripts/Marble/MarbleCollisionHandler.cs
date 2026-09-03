@@ -52,6 +52,9 @@ namespace Dapaolou.Marble
         /// </summary>
         private void HandleCollision(MarbleData otherMarble, float impactForce, Vector3 contactPoint)
         {
+            // 已摧毁的弹珠不参与任何计分/摧毁判定
+            if (marbleData.state == MarbleState.Destroyed || otherMarble.state == MarbleState.Destroyed) return;
+
             // 确定攻击者和受害者
             MarbleData attacker = null;
             MarbleData victim = null;
@@ -173,8 +176,7 @@ namespace Dapaolou.Marble
             // 玻璃弹珠散架：断开整座炮楼的 FixedJoint 并从爆点向外散开
             ScatterTower(marble, impactForce);
 
-            // 延迟销毁对象
-            Destroy(marble.gameObject, 0.5f);
+            // 移除由 MarbleData.Update 管理：保持物理滚动，滚停后自动销毁
         }
 
         /// <summary>

@@ -162,14 +162,13 @@ namespace Dapaolou.Game
         }
 
         /// <summary>
-        /// 清理被摧毁的弹珠物体：断开关节并延迟销毁（给散架特效留时间）
+        /// 清理被摧毁的弹珠物体：断开关节（物体移除由 MarbleData 在滚停后管理）
         /// </summary>
         private void CleanupMarbleObject(MarbleData marble)
         {
             if (marble == null) return;
             var joint = marble.GetComponent<FixedJoint>();
             if (joint != null) UnityEngine.Object.Destroy(joint);
-            UnityEngine.Object.Destroy(marble.gameObject, 0.5f);
         }
         
         /// <summary>
