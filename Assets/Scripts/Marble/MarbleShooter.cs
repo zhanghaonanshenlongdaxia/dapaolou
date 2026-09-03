@@ -377,18 +377,29 @@ namespace Dapaolou.Marble
         /// </summary>
         private void UpdateAimVisuals()
         {
-            // 更新瞄准线：台球式贴地辅助线——沿水平瞄准方向采样并投射到地面
+            // 更新瞄准线：射线驱动——从要弹的弹珠出发，指向准星射线落点，贴地延伸、到落点即停
             if (aimLine != null)
             {
-                aimLine.enabled = true;
-                Vector3 shootPos = GetShootPosition();
-                Vector3 flatDir = new Vector3(aimDirection.x, 0f, aimDirection.z).normalized;
+                // 起点优先用当前瞄准/选中的弹珠，弹珠从它自己身上出发
+                Vector3 startPos = currentMarble != null
+                    ? currentMarble.transform.position
+                    : GetShootPosition();
+
+                // 方向与长度：弹珠 → 准星射线落点（aimHitPoint 由 UpdateAimDirection 射线检测得出）
+                Vector3 toHit = aimHitPoint - startPos;
+                Vector3 flatDir = new Vector3(toHit.x, 0f, toHit.z).normalized;
                 if (flatDir.sqrMagnitude < 0.0001f)
                     flatDir = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
 
-                // 从脚下地面点起步
-                Vector3 cursor = shootPos;
-                if (Physics.Raycast(shootPos, Vector3.down, out var startHit, 2f, groundLayer))
+                float length = new Vector3(toHit.x, 0f, toHit.z).magnitude;
+                aimLine.enabled = length > 0.4f;
+                if (!aimLine.enabled) return;
+
+                length = Mathf.Clamp(length, 0.5f, aimDistance);
+
+                // 贴地采样：沿弹珠→落点方向逐步投影到地面
+                Vector3 cursor = startPos;
+                if (Physics.Raycast(startPos, Vector3.down, out var startHit, 2f, groundLayer))
                     cursor = startHit.point + Vector3.up * 0.03f;
 
                 const int segments = 12;
@@ -396,7 +407,7 @@ namespace Dapaolou.Marble
                 float curY = cursor.y;
                 for (int i = 0; i <= segments; i++)
                 {
-                    Vector3 p = cursor + flatDir * (aimDistance * i / segments);
+                    Vector3 p = cursor + flatDir * (length * i / segments);
                     if (Physics.Raycast(p + Vector3.up * 1.5f, Vector3.down, out var gh, 3f, groundLayer))
                         curY = gh.point.y + 0.03f;
                     p.y = curY;
