@@ -55,7 +55,6 @@ namespace Dapaolou.Marble
         [Header("蓄力仪表盘")]
         [SerializeField] private GameObject powerGauge;             // 蓄力扇形仪表盘（油门盘）
         [SerializeField] private Image powerGaugeFill;              // 蓄力填充扇形
-        [SerializeField] private RectTransform needleTransform;     // 指针（随力度旋转）
 
         // 内部状态
         private ShootState currentState = ShootState.Idle;
@@ -677,14 +676,13 @@ namespace Dapaolou.Marble
             if (powerGaugeFill != null)
             {
                 powerGaugeFill.fillAmount = currentPower;
-                powerGaugeFill.color = powerGradient.Evaluate(currentPower);
-            }
-
-            // 指针旋转：底部(-90°) 顺时针扫 270°
-            if (needleTransform != null)
-            {
-                float angle = -90f + 270f * currentPower;
-                needleTransform.localRotation = Quaternion.Euler(0f, 0f, angle);
+                // 三段变色：白（轻）→ 绿（中）→ 红（重）
+                if (currentPower < 1f / 3f)
+                    powerGaugeFill.color = Color.white;
+                else if (currentPower < 2f / 3f)
+                    powerGaugeFill.color = Color.green;
+                else
+                    powerGaugeFill.color = Color.red;
             }
         }
         
