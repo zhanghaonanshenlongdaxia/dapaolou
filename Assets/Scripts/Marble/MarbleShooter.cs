@@ -28,14 +28,15 @@ namespace Dapaolou.Marble
         [SerializeField] private float chargeSpeed = 1f;            // 蓄力速度
         [SerializeField] private float maxChargeTime = 2f;          // 最大蓄力时间
         [SerializeField] private float aimDistance = 10f;            // 瞄准射线距离
-        
+        [SerializeField] private float maxShootDistance = 1.5f;     // 最大发射距离（玩家与弹珠）
+
         [Header("高尔夫式力度条")]
         [SerializeField] private Slider powerSlider;                // 力度条UI
         [SerializeField] private Image powerFill;                   // 力度条填充
         [SerializeField] private Gradient powerGradient;            // 力度条颜色渐变
         [SerializeField] private float powerBarBounceSpeed = 2f;    // 力度条往返速度
         [SerializeField] private bool useGolfStyleBounce = true;    // 使用高尔夫式往返蓄力
-        
+
         [Header("瞄准系统")]
         [SerializeField] private LineRenderer aimLine;              // 瞄准线
         [SerializeField] private Transform aimTarget;               // 瞄准目标点
@@ -43,14 +44,18 @@ namespace Dapaolou.Marble
         [SerializeField] private LayerMask marbleLayer;             // 弹珠层级
         [SerializeField] private float aimLineWidth = 0.02f;
         [SerializeField] private Color aimLineColor = Color.white;
-        
+
         [Header("手抖系统")]
         [SerializeField] private HandTremorSystem tremorSystem;     // 手抖系统引用
         [SerializeField] private bool enableTremor = true;          // 是否启用手抖
-        
+
         [Header("UI提示")]
         [SerializeField] private GameObject aimDotPrefab;           // 瞄准点预制体
         [SerializeField] private GameObject tremorIndicator;        // 手抖指示器
+        [SerializeField] private TMPro.TextMeshProUGUI distanceHintText;  // 距离提示文本
+        [SerializeField] private float hintDisplayTime = 1.5f;      // 提示显示时间
+        private string lastHintMessage;                             // 去重日志用
+        private Coroutine hideHintCoroutine;                        // 隐藏提示的协程引用
 
         [Header("蓄力仪表盘")]
         [SerializeField] private GameObject powerGauge;             // 蓄力扇形仪表盘（油门盘）
@@ -181,6 +186,24 @@ namespace Dapaolou.Marble
             UpdateAimDirection();
             UpdateAimVisuals();
             SelectAimedMarble();
+
+            // 检查距离并显示提示
+            if (currentMarble != null)
+            {
+                float distance = Vector3.Distance(transform.position, currentMarble.transform.position);
+                if (distance > maxShootDistance)
+                {
+                    ShowDistanceHint("距离过远，靠近弹珠！");
+                }
+                else
+                {
+                    HideDistanceHint();
+                }
+            }
+            else
+            {
+                HideDistanceHint();
+            }
 
             // 滚轮上下切换要弹的小兵
             float scroll = Input.GetAxis("Mouse ScrollWheel");
@@ -410,25 +433,27 @@ namespace Dapaolou.Marble
         private void UpdateAimDirection()
         {
             if (playerCamera == null) return;
-            
+
             // 从摄像机中心发射射线
             Ray ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
             RaycastHit hit;
-            
+
             // 射线检测
             int layerMask = groundLayer | marbleLayer;
-            
+
             if (Physics.Raycast(ray, out hit, aimDistance, layerMask))
             {
                 aimHitPoint = hit.point;
-                aimDirection = (hit.point - GetShootPosition()).normalized;
+                // 从弹珠位置指向命中点（不是从手部位置），这样发射方向和辅助线一致
+                Vector3 startPos = currentMarble != null ? currentMarble.transform.position : GetShootPosition();
+                aimDirection = (hit.point - startPos).normalized;
             }
             else
             {
                 aimHitPoint = ray.GetPoint(aimDistance);
                 aimDirection = ray.direction;
             }
-            
+
             // 应用手抖效果
             if (enableTremor && tremorSystem != null)
             {
@@ -504,12 +529,26 @@ namespace Dapaolou.Marble
         /// </summary>
         private void StartCharging()
         {
+            // 检查玩家与弹珠的距离
+            if (currentMarble == null)
+            {
+                ShowDistanceHint("没有选中弹珠！");
+                return;
+            }
+
+            float distance = Vector3.Distance(transform.position, currentMarble.transform.position);
+            if (distance > maxShootDistance)
+            {
+                ShowDistanceHint("距离过远，靠近弹珠！");
+                return;
+            }
+
             currentChargeTime = 0f;
             currentPower = 0f;
             isChargingForward = true;
-            
+
             ChangeState(ShootState.Charging);
-            
+
             // 显示力度条与蓄力仪表盘
             if (powerSlider != null)
             {
@@ -557,6 +596,9 @@ namespace Dapaolou.Marble
             if (rb != null)
             {
                 rb.isKinematic = false;
+                // isKinematic 赋值会重建 PhysX actor 并丢失 CCD 配对，必须重新指定连续碰撞检测
+                rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+                rb.WakeUp();
                 // VelocityChange：力度即出膛速度(m/s)，与手册"力度>5 打爆"判定一致，
                 // 避免 Impulse 在轻质量弹珠上产生数百 m/s 的荒谬速度
                 rb.AddForce(direction * force, ForceMode.VelocityChange);
@@ -679,13 +721,64 @@ namespace Dapaolou.Marble
         #endregion
         
         #region 辅助方法
-        
+
         private Vector3 GetShootPosition()
         {
             // 弹珠发射位置（玩家手部位置）
             return transform.position + transform.forward * 0.5f + Vector3.down * 0.3f;
         }
-        
+
+        /// <summary>
+        /// 显示距离提示
+        /// </summary>
+        private void ShowDistanceHint(string message)
+        {
+            if (distanceHintText != null)
+            {
+                distanceHintText.text = message;
+                distanceHintText.gameObject.SetActive(true);
+
+                // 停止之前的协程，避免重复
+                if (hideHintCoroutine != null)
+                {
+                    StopCoroutine(hideHintCoroutine);
+                }
+                // 启动新协程自动隐藏
+                hideHintCoroutine = StartCoroutine(HideDistanceHintAfterDelay());
+            }
+            // 同一条提示只打一次日志（Update 每帧调用，避免刷屏）
+            if (lastHintMessage != message)
+            {
+                lastHintMessage = message;
+                Debug.Log($"[MarbleShooter] {message}");
+            }
+        }
+
+        /// <summary>
+        /// 立即隐藏距离提示
+        /// </summary>
+        private void HideDistanceHint()
+        {
+            if (hideHintCoroutine != null)
+            {
+                StopCoroutine(hideHintCoroutine);
+                hideHintCoroutine = null;
+            }
+            if (distanceHintText != null)
+            {
+                distanceHintText.gameObject.SetActive(false);
+            }
+        }
+
+        private System.Collections.IEnumerator HideDistanceHintAfterDelay()
+        {
+            yield return new WaitForSeconds(hintDisplayTime);
+            if (distanceHintText != null)
+            {
+                distanceHintText.gameObject.SetActive(false);
+            }
+        }
+
         private void UpdatePowerBarUI()
         {
             if (powerSlider != null)

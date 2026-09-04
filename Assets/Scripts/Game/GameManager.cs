@@ -182,24 +182,27 @@ namespace Dapaolou.Game
         private List<MarbleData> SpawnSoldiersForPlayer(int playerId, Vector3 center)
         {
             List<MarbleData> soldiers = new List<MarbleData>();
-            
+
             int soldierCount = gameConfig.soldierCountPerPlayer;
-            float radius = gameConfig.soldierSpawnRadius;
-            float angleRange = gameConfig.soldierSpawnAngle;
-            
+
+            // 横向一排（垂直于敌方方向）：避免队友挡在射击线上，
+            // 扇形布阵会让前排队友挡住后排的发射路线（弹珠出门即撞友军弹飞 3-4 米）
+            Vector3 enemyDir = playerId == 0 ? Vector3.right : Vector3.left;
+            Vector3 perp = Vector3.Cross(Vector3.up, enemyDir);
+            float spacing = 0.18f;   // 相邻小兵 18cm（弹珠直径 5cm，留足间隙）
+
             for (int i = 0; i < soldierCount; i++)
             {
-                // 计算小兵位置（扇形分布）
-                float angle = (-angleRange / 2 + angleRange / (soldierCount - 1) * i) * Mathf.Deg2Rad;
-                Vector3 offset = new Vector3(Mathf.Sin(angle), 0, Mathf.Cos(angle)) * radius;
-                Vector3 spawnPos = center + offset;
-                
+                // 计算小兵位置（横向一排：左中右）
+                float lateral = (i - (soldierCount - 1) / 2f) * spacing;
+                Vector3 spawnPos = center + perp * lateral;
+
                 // 创建小兵
                 GameObject soldierObj = CreateSoldierMarble(spawnPos, playerId, i);
                 MarbleData soldierData = soldierObj.GetComponent<MarbleData>();
                 soldiers.Add(soldierData);
             }
-            
+
             return soldiers;
         }
         
@@ -219,14 +222,8 @@ namespace Dapaolou.Game
             rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             
-            // 设置物理材质
-            SphereCollider collider = marbleObj.GetComponent<SphereCollider>();
-            PhysicMaterial physMat = new PhysicMaterial("SoldierMarble");
-            physMat.dynamicFriction = 0.4f;
-            physMat.staticFriction = 0.4f;
-            physMat.bounciness = 0.3f;
-            collider.material = physMat;
-            
+            // 物理材质由 MarbleData.Awake 统一设置为玻璃材质
+
             // 添加弹珠数据
             MarbleData marbleData = marbleObj.AddComponent<MarbleData>();
             marbleData.marbleType = MarbleType.Soldier;

@@ -227,14 +227,8 @@ namespace Dapaolou.Editor
             rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             
-            // 设置物理材质
-            SphereCollider collider = marble.GetComponent<SphereCollider>();
-            PhysicMaterial physMat = new PhysicMaterial("Marble");
-            physMat.dynamicFriction = 0.4f;
-            physMat.staticFriction = 0.4f;
-            physMat.bounciness = 0.3f;
-            collider.material = physMat;
-            
+            // 物理材质由 MarbleData.Awake 统一设置为玻璃材质
+
             // 添加游戏组件
             marble.AddComponent<MarbleData>();
             marble.AddComponent<MarbleCollisionHandler>();

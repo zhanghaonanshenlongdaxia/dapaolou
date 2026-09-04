@@ -46,68 +46,145 @@ namespace Dapaolou.Terrain
         [SerializeField] private TerrainEffectConfig cementConfig = new TerrainEffectConfig
         {
             terrainType = TerrainType.Cement,
-            frictionMultiplier = 0.8f,
-            bouncinessMultiplier = 1.2f,
-            speedMultiplier = 1.1f,
+            frictionMultiplier = 0.6f,       // 玻璃珠在水泥地上低摩擦
+            bouncinessMultiplier = 1.3f,     // 弹性好
+            speedMultiplier = 1.05f,         // 基本不减速
             canStuck = false,
             stuckChance = 0f
         };
-        
+
         [SerializeField] private TerrainEffectConfig dirtConfig = new TerrainEffectConfig
         {
             terrainType = TerrainType.Dirt,
-            frictionMultiplier = 1.3f,
-            bouncinessMultiplier = 0.7f,
-            speedMultiplier = 0.9f,
+            frictionMultiplier = 1.0f,       // 泥土地：中等摩擦
+            bouncinessMultiplier = 0.85f,    // 弹性稍减
+            speedMultiplier = 0.95f,         // 轻微减速（5%）
             canStuck = false,
             stuckChance = 0f
         };
-        
+
         [SerializeField] private TerrainEffectConfig grassConfig = new TerrainEffectConfig
         {
             terrainType = TerrainType.Grass,
-            frictionMultiplier = 1.8f,
-            bouncinessMultiplier = 0.5f,
-            speedMultiplier = 0.7f,
+            frictionMultiplier = 1.4f,       // 草堆：明显摩擦
+            bouncinessMultiplier = 0.6f,     // 弹性大幅降低
+            speedMultiplier = 0.8f,          // 减速20%
             canStuck = false,
             stuckChance = 0f
         };
-        
+
         [SerializeField] private TerrainEffectConfig looseSandConfig = new TerrainEffectConfig
         {
             terrainType = TerrainType.LooseSand,
-            frictionMultiplier = 2.0f,
-            bouncinessMultiplier = 0.3f,
-            speedMultiplier = 0.5f,
+            frictionMultiplier = 1.8f,       // 松土：高摩擦
+            bouncinessMultiplier = 0.4f,     // 弹性很低
+            speedMultiplier = 0.65f,         // 减速35%
             canStuck = true,
-            stuckChance = 0.3f,
-            stuckDuration = 3f
+            stuckChance = 0.2f,              // 20%概率陷住
+            stuckDuration = 2.5f
         };
 
         [SerializeField] private TerrainEffectConfig puddleConfig = new TerrainEffectConfig
         {
             terrainType = TerrainType.Puddle,
-            frictionMultiplier = 2.4f,
-            bouncinessMultiplier = 0.2f,
-            speedMultiplier = 0.45f,
+            frictionMultiplier = 2.0f,       // 水坑：最高摩擦
+            bouncinessMultiplier = 0.3f,     // 弹性最低
+            speedMultiplier = 0.55f,         // 减速45%
             canStuck = false,
             stuckChance = 0f
         };
 
+        [Header("滚动减速度（恒定减速度模型，台球式）")]
+        [SerializeField] private float rollDecelMultiplier = 3f;   // 节奏系数：1=纯物理实测值，>1 加快回合节奏
+
         /// <summary>
-        /// 各地形的滚动阻力（rb.drag），供弹珠状态机查询
+        /// 各地形的恒定滚动减速度 a=Crr·g·k（m/s²，方向恒反向水平速度）。
+        /// Crr 抄工程实测表（Engineering Toolbox）：水泥 0.01 / 土路 0.05 / 草地 0.15 / 沙 0.25 / 水坑 0.3。
+        /// 替代旧 rb.drag 指数衰减——玻璃珠滚动阻力是恒力，不是按速度比例衰减。
         /// </summary>
-        public static float GetDragFor(TerrainType type)
+        public static float GetRollingDeceleration(TerrainType type)
         {
+            float crr;
             switch (type)
             {
-                case TerrainType.Cement: return 0.5f;
-                case TerrainType.Dirt: return 0.8f;
-                case TerrainType.Grass: return 1.6f;
-                case TerrainType.LooseSand: return 2.6f;
-                case TerrainType.Puddle: return 3.2f;
-                default: return 0.5f;
+                case TerrainType.Cement: crr = 0.01f; break;
+                case TerrainType.Dirt: crr = 0.05f; break;
+                case TerrainType.Grass: crr = 0.15f; break;
+                case TerrainType.LooseSand: crr = 0.25f; break;
+                case TerrainType.Puddle: crr = 0.3f; break;
+                default: crr = 0.01f; break;
             }
+            float k = Instance != null ? Instance.rollDecelMultiplier : 3f;
+            return crr * 9.81f * k;
+        }
+
+        [Header("水泥缝改向")]
+        [SerializeField] private float seamDeflectMinDeg = 1.5f;   // 过缝最小偏转角
+        [SerializeField] private float seamDeflectMaxDeg = 4.5f;   // 过缝最大偏转角
+
+        /// <summary>水泥缝线：axisX=true 表示缝沿 X=coord（纵向缝），min/max 为另一轴延展范围</summary>
+        public struct CementSeam
+        {
+            public bool axisX;
+            public float coord;
+            public float min;
+            public float max;
+        }
+
+        private readonly System.Collections.Generic.List<CementSeam> cementSeams = new System.Collections.Generic.List<CementSeam>();
+
+        void Start()
+        {
+            // 注册水泥缝：沟壕无碰撞体（1.2cm 缝由弹珠天然跨过），改向由程序在穿越瞬间施加
+            cementSeams.Clear();
+            var yard = GameObject.Find("YardTerrain");
+            if (yard == null) return;
+            foreach (Transform child in yard.transform)
+            {
+                if (!child.name.StartsWith("CementTrench")) continue;
+                var rend = child.GetComponent<Renderer>();
+                if (rend == null) continue;
+                var b = rend.bounds;
+                var seam = new CementSeam();
+                if (b.size.x <= b.size.z)
+                {
+                    seam.axisX = true;
+                    seam.coord = b.center.x;
+                    seam.min = b.center.z - b.size.z * 0.5f;
+                    seam.max = b.center.z + b.size.z * 0.5f;
+                }
+                else
+                {
+                    seam.axisX = false;
+                    seam.coord = b.center.z;
+                    seam.min = b.center.x - b.size.x * 0.5f;
+                    seam.max = b.center.x + b.size.x * 0.5f;
+                }
+                cementSeams.Add(seam);
+            }
+        }
+
+        /// <summary>
+        /// 检测本物理步内弹珠是否穿越了水泥缝；穿越则返回随机偏转角（度，正负随机）
+        /// </summary>
+        public static bool TryGetSeamDeflection(Vector3 from, Vector3 to, out float deflectDeg)
+        {
+            deflectDeg = 0f;
+            if (Instance == null) return false;
+            foreach (var seam in Instance.cementSeams)
+            {
+                float a = seam.axisX ? from.x : from.z;
+                float b = seam.axisX ? to.x : to.z;
+                float along = seam.axisX ? from.z : from.x;
+                if ((a - seam.coord) * (b - seam.coord) < 0f &&
+                    along > seam.min - 0.05f && along < seam.max + 0.05f)
+                {
+                    deflectDeg = Random.Range(Instance.seamDeflectMinDeg, Instance.seamDeflectMaxDeg)
+                                 * (Random.value < 0.5f ? -1f : 1f);
+                    return true;
+                }
+            }
+            return false;
         }
         
         [Header("地形检测")]

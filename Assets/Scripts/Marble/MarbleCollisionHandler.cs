@@ -20,7 +20,9 @@ namespace Dapaolou.Marble
         
         private MarbleData marbleData;
         private AudioSource audioSource;
-        
+        private Vector3 lastSweepPos;           // 上一物理步位置（高速扫掠检测用）
+        private bool sweepPrevValid = false;
+
         void Awake()
         {
             marbleData = GetComponent<MarbleData>();
@@ -29,20 +31,51 @@ namespace Dapaolou.Marble
             {
                 audioSource = gameObject.AddComponent<AudioSource>();
             }
+            lastSweepPos = transform.position;
         }
-        
+
+        void FixedUpdate()
+        {
+            // 高速弹珠扫掠检测：离散步进在 10+ m/s 时会穿透 5cm 目标（27cm/步），
+            // 用球形扫掠补上物理引擎漏掉的接触
+            if (marbleData == null || marbleData.state != MarbleState.Rolling) { sweepPrevValid = false; return; }
+            var rb = marbleData.GetComponent<Rigidbody>();
+            if (rb == null || rb.isKinematic) { sweepPrevValid = false; return; }
+
+            Vector3 cur = transform.position;
+            if (!sweepPrevValid) { lastSweepPos = cur; sweepPrevValid = true; return; }
+
+            Vector3 move = cur - lastSweepPos;
+            float dist = move.magnitude;
+            if (dist > 0.02f)
+            {
+                var hits = Physics.SphereCastAll(lastSweepPos, 0.03f, move.normalized, dist + 0.02f);
+                foreach (var h in hits)
+                {
+                    var otherData = h.collider.GetComponent<MarbleData>();
+                    if (otherData == null || otherData == marbleData) continue;
+                    if (otherData.state == MarbleState.Destroyed) continue;
+                    float impactForce = (rb.velocity - otherData.GetComponent<Rigidbody>().velocity).magnitude;
+                    HandleCollision(otherData, impactForce, h.point);
+                    break;   // 每步只处理一次命中
+                }
+            }
+            lastSweepPos = cur;
+        }
+
         void OnCollisionEnter(Collision collision)
         {
+            Debug.Log($"[COLLISION] {gameObject.name} x {collision.gameObject.name} relV={collision.relativeVelocity.magnitude:F2} layers={gameObject.layer}/{collision.gameObject.layer}");
             // 获取碰撞的弹珠
             MarbleData otherMarble = collision.gameObject.GetComponent<MarbleData>();
             if (otherMarble == null) return;
-            
+
             // 计算碰撞力度
             float impactForce = collision.relativeVelocity.magnitude;
-            
+
             // 忽略太轻的碰撞
             if (impactForce < minImpactForce) return;
-            
+
             // 处理碰撞
             HandleCollision(otherMarble, impactForce, collision.contacts[0].point);
         }
@@ -92,7 +125,11 @@ namespace Dapaolou.Marble
             int attackerId = attacker.GetEffectiveAttackerId();
 
             // 归属相同（自己人，或被自己弹珠撞飞的弹珠弹回）→ 忽略，避免误毁己方弹珠
-            if (attackerId == victim.GetEffectiveAttackerId()) return;
+            if (attackerId == victim.GetEffectiveAttackerId())
+            {
+                Debug.Log($"[HC] {gameObject.name}: 同归属忽略 attacker={attacker.gameObject.name}({attackerId}) victim={victim.gameObject.name}({victim.GetEffectiveAttackerId()})");
+                return;
+            }
 
             // 传递攻击链：被撞的弹珠如果再撞坏别人的弹珠，仍算本攻击者的功劳
             victim.lastAttackerId = attackerId;
@@ -148,11 +185,9 @@ namespace Dapaolou.Marble
             }
             else
             {
-                // 小兵弹珠，直接检查力度
-                if (impactForce >= destroyThreshold)
-                {
-                    DestroyMarble(victim, impactForce);
-                }
+                // 小兵弹珠：打中即被吃掉（传统打弹珠规则），无力度门槛——
+                // 变 Destroyed 保持滚动，滚停后渐隐消失（MarbleData 负责）
+                DestroyMarble(victim, impactForce);
             }
         }
         
@@ -184,6 +219,8 @@ namespace Dapaolou.Marble
         /// </summary>
         private void ScatterTower(MarbleData destroyed, float impactForce)
         {
+            // 仅炮楼弹珠触发散架：小兵被吃不应波及同队炮楼
+            if (destroyed.marbleType != MarbleType.Tower) return;
             if (GameManager.Instance == null) return;
             var owner = GameManager.Instance.GetPlayer(destroyed.ownerPlayerId);
             if (owner == null || owner.towerMarbles == null) return;
@@ -199,12 +236,14 @@ namespace Dapaolou.Marble
                 var joint = m.GetComponent<FixedJoint>();
                 if (joint != null) Destroy(joint);
 
-                // 从被摧毁点向外弹开
+                // 从被摧毁点向外弹开（直接赋速度：AddForce 要等下次物理步生效，
+                // 期间 pendingCleanup 检查会因速度<0.3 把几乎没动的弹珠原地瞬消）
                 var rb = m.GetComponent<Rigidbody>();
                 if (rb != null)
                 {
                     Vector3 dir = (m.transform.position - epicenter).normalized + Vector3.up * 0.6f;
-                    rb.AddForce(dir.normalized * scatter, ForceMode.VelocityChange);
+                    rb.WakeUp();
+                    rb.velocity = dir.normalized * scatter;
                 }
             }
 

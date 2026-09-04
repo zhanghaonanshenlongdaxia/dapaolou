@@ -138,17 +138,7 @@ namespace Dapaolou.Game
                 Rigidbody rb = marbleObj.AddComponent<Rigidbody>();
                 rb.mass = towerMass / (baseMarbleCount + 1);
                 rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-                
-                // 添加物理材质
-                SphereCollider collider = marbleObj.GetComponent<SphereCollider>();
-                if (collider != null)
-                {
-                    PhysicMaterial physMat = new PhysicMaterial("Marble");
-                    physMat.dynamicFriction = 0.4f;
-                    physMat.staticFriction = 0.4f;
-                    physMat.bounciness = 0.3f;
-                    collider.material = physMat;
-                }
+                // 物理材质由 MarbleData.Awake 统一设置为玻璃材质
             }
             
             // 玻璃质感材质
