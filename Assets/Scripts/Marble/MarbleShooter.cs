@@ -566,6 +566,13 @@ namespace Dapaolou.Marble
             }
 
             marble.state = MarbleState.Rolling;
+
+            // 发射音效（玩家与 AI 共用此路径），力度归一化为 0~1
+            if (Audio.AudioManager.Instance != null)
+            {
+                Audio.AudioManager.Instance.PlayMarbleFlick(
+                    Mathf.InverseLerp(minShootForce, maxShootForce, force));
+            }
         }
         
         /// <summary>

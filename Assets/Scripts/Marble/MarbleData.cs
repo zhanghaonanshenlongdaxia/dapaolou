@@ -123,7 +123,11 @@ namespace Dapaolou.Marble
                         if (t != currentTerrain)
                         {
                             if (t == Terrain.TerrainType.Puddle)
+                            {
                                 rb.velocity *= 0.5f;    // 入水骤减
+                                if (Audio.AudioManager.Instance != null)
+                                    Audio.AudioManager.Instance.PlayWaterSplash();
+                            }
                             currentTerrain = t;
                             rb.drag = Terrain.TerrainEffectSystem.GetDragFor(t);
                         }

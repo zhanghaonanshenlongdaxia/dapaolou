@@ -226,8 +226,12 @@ namespace Dapaolou.Marble
                 Destroy(particle, 2f);
             }
             
-            // 音效
-            if (hitSound != null && audioSource != null)
+            // 音效：优先走全局 AudioManager，未接入时退回本地音源
+            if (Audio.AudioManager.Instance != null)
+            {
+                Audio.AudioManager.Instance.PlayMarbleHit(Mathf.Clamp01(force / 10f));
+            }
+            else if (hitSound != null && audioSource != null)
             {
                 audioSource.PlayOneShot(hitSound, Mathf.Clamp01(force / 10f));
             }
@@ -246,8 +250,12 @@ namespace Dapaolou.Marble
                 Destroy(particle, 3f);
             }
             
-            // 音效
-            if (destroySound != null && audioSource != null)
+            // 音效：优先走全局 AudioManager，未接入时退回本地音源
+            if (Audio.AudioManager.Instance != null)
+            {
+                Audio.AudioManager.Instance.PlayGlassShatter();
+            }
+            else if (destroySound != null && audioSource != null)
             {
                 audioSource.PlayOneShot(destroySound, 1f);
             }
