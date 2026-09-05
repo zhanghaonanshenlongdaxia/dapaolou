@@ -60,7 +60,8 @@ namespace Dapaolou.Marble
         [Header("蓄力仪表盘")]
         [SerializeField] private GameObject powerGauge;             // 蓄力扇形仪表盘（油门盘）
         [SerializeField] private Image powerGaugeFill;              // 蓄力填充扇形
-        [SerializeField] private float pitchAdjustSpeed = 45f;      // 仰角调整速度（度/秒）
+        [SerializeField] private TMPro.TextMeshProUGUI pitchText;   // 当前仰角读数（力度盘旁）
+        [SerializeField] private float pitchScrollDegrees = 5f;     // 滚轮每格仰角增量（度）
 
         // 内部状态
         private ShootState currentState = ShootState.Idle;
@@ -335,11 +336,10 @@ namespace Dapaolou.Marble
         
         private void UpdateCharging()
         {
-            // 蓄力时 W/S 调整起飞仰角（0~85°，向上抛射过障碍）
-            if (Input.GetKey(KeyCode.W))
-                launchPitch = Mathf.Min(launchPitch + pitchAdjustSpeed * Time.deltaTime, 85f);
-            if (Input.GetKey(KeyCode.S))
-                launchPitch = Mathf.Max(launchPitch - pitchAdjustSpeed * Time.deltaTime, 0f);
+            // 蓄力时滚轮调整起飞仰角（0~85°，向上抛射过障碍），每格滚轮 ±pitchScrollDegrees
+            float pitchScroll = Input.GetAxis("Mouse ScrollWheel");
+            if (Mathf.Abs(pitchScroll) > 0.001f)
+                launchPitch = Mathf.Clamp(launchPitch + pitchScroll * pitchScrollDegrees * 10f, 0f, 85f);
 
             // 继续更新瞄准方向（手抖会影响）
             UpdateAimDirection();
@@ -597,7 +597,8 @@ namespace Dapaolou.Marble
             {
                 rb.isKinematic = false;
                 // isKinematic 赋值会重建 PhysX actor 并丢失 CCD 配对，必须重新指定连续碰撞检测
-                rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+                // Speculative：动态×动态配对也生效（扫掠式只对静态可靠，实测直射会穿过敌方弹珠）
+                rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
                 rb.WakeUp();
                 // VelocityChange：力度即出膛速度(m/s)，与手册"力度>5 打爆"判定一致，
                 // 避免 Impulse 在轻质量弹珠上产生数百 m/s 的荒谬速度
@@ -608,6 +609,7 @@ namespace Dapaolou.Marble
             }
 
             marble.state = MarbleState.Rolling;
+            marble.shotSequence = ++MarbleData.s_shotCounter;   // 攻守判定戳：本次对局最新发射者
 
             // 发射音效（玩家与 AI 共用此路径），力度归一化为 0~1
             if (Audio.AudioManager.Instance != null)
@@ -801,6 +803,12 @@ namespace Dapaolou.Marble
                     powerGaugeFill.color = Color.green;
                 else
                     powerGaugeFill.color = Color.red;
+            }
+
+            // 仰角读数：随滚轮调整实时刷新
+            if (pitchText != null)
+            {
+                pitchText.text = $"仰角 {Mathf.RoundToInt(launchPitch)}°";
             }
         }
         

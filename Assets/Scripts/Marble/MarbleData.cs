@@ -34,6 +34,11 @@ namespace Dapaolou.Marble
         public int lastAttackerId = -1;         // 攻击链归属：被撞飞后代表哪个玩家（-1=无）
         public bool pendingCleanup = false;    // 待清理标记（炮楼散架后滚动停止即销毁）
 
+        /// <summary>发射序号：每次发射盖唯一递增戳（0=未被发射过）。
+        /// 攻守判定用——回合/state/速度在双回调+地形刹停下都会出现两回调结论相左</summary>
+        public long shotSequence;
+        public static long s_shotCounter;
+
         /// <summary>
         /// 有效攻击归属：被撞飞的弹珠代表把它撞飞的玩家（连环碰撞算原攻击者）
         /// </summary>
@@ -85,7 +90,9 @@ namespace Dapaolou.Marble
             rb.mass = baseMass;
             rb.drag = 0f;                  // 空气阻力忽略；滚动阻力走恒定减速度模型（FixedUpdate）
             rb.angularDrag = 0.2f;         // 旋转阻力调低，保留玻璃的滚动感
-            rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            // 推测式 CCD：扫掠式(ContinuousDynamic)对动态刚体不生效，18cm/步会直接穿过
+            // 5cm 的敌方弹珠（实测直射无碰撞）——Speculative 对动态配对也做预测检测
+            rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             rb.sleepThreshold = 0f;        // 永不睡眠：睡眠刚体会被高速弹珠穿透（CCD 不检测睡眠对）
 

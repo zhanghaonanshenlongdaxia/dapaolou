@@ -230,6 +230,9 @@ namespace Dapaolou.Game
             marbleData.ownerPlayerId = playerId;
             marbleData.towerIndex = -1;
             marbleObj.AddComponent<MarbleCollisionHandler>();
+
+            // 阵营标签：碰撞检测按阵营判定吃子
+            marbleObj.tag = "Team" + playerId;
             
             // 玻璃质感 + 玩家色
             Renderer renderer = marbleObj.GetComponent<Renderer>();
@@ -452,8 +455,9 @@ namespace Dapaolou.Game
             // 有效攻击归属：连环碰撞中被撞飞的弹珠仍代表原始攻击者
             int attackerId = attacker.GetEffectiveAttackerId();
 
-            // 检查是否是不同玩家的弹珠（按有效归属判断）
-            if (attackerId == victim.GetEffectiveAttackerId())
+            // 真友军（同阵营）才忽略——双回调会先后写入/读取 lastAttackerId，
+            // 用链 ID 判阵营会把敌方弹珠误判成己方（打中不消除的根因）
+            if (attacker.ownerPlayerId == victim.ownerPlayerId)
             {
                 // 不能打自己的弹珠（含被撞飞的己方弹珠弹回）
                 return;

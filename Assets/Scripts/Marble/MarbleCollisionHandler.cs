@@ -88,46 +88,45 @@ namespace Dapaolou.Marble
             // 已摧毁的弹珠不参与任何计分/摧毁判定
             if (marbleData.state == MarbleState.Destroyed || otherMarble.state == MarbleState.Destroyed) return;
 
-            // 确定攻击者和受害者
-            MarbleData attacker = null;
-            MarbleData victim = null;
-            
-            // 判断哪个是刚发射的弹珠（正在滚动的）
-            if (marbleData.state == MarbleState.Rolling && otherMarble.state == MarbleState.Idle)
+            // 确定攻击者和受害者：刚发射的弹珠（shotSequence 大）=攻击方。
+            // 必须用发射戳——回合/state/速度在"地形颠簸刹停+回合切换"下会让两个回调
+            // 得出相反结论（实测：射击弹珠被刹停→回合切走→己方弹珠反被敌方"吃掉"）。
+            // 双方都没被发射过（seq 相等，互相碰撞）→ 不产生吃子。
+            if (marbleData.shotSequence == otherMarble.shotSequence)
+            {
+                Debug.Log($"[HC] {gameObject.name}: 非发射接触跳过 {marbleData.gameObject.name} x {otherMarble.gameObject.name}");
+                return;
+            }
+
+            MarbleData attacker, victim;
+            if (marbleData.shotSequence > otherMarble.shotSequence)
             {
                 attacker = marbleData;
                 victim = otherMarble;
             }
-            else if (otherMarble.state == MarbleState.Rolling && marbleData.state == MarbleState.Idle)
+            else
             {
                 attacker = otherMarble;
                 victim = marbleData;
             }
-            else
+
+            // 攻击方已停下的旧弹珠蹭到人不产生吃子（发射戳是永久的，只有滚动中的
+            // 发射弹珠才算"这一击"）
+            if (attacker.state == MarbleState.Idle)
             {
-                // 两个都在滚动，根据速度判断
-                float mySpeed = marbleData.GetCurrentSpeed();
-                float otherSpeed = otherMarble.GetCurrentSpeed();
-                
-                if (mySpeed > otherSpeed)
-                {
-                    attacker = marbleData;
-                    victim = otherMarble;
-                }
-                else
-                {
-                    attacker = otherMarble;
-                    victim = marbleData;
-                }
+                Debug.Log($"[HC] {gameObject.name}: 攻击方已静止跳过 {attacker.gameObject.name} x {victim.gameObject.name}");
+                return;
             }
             
             // 有效攻击归属（连环碰撞：被撞飞的弹珠代表把它撞飞的玩家）
             int attackerId = attacker.GetEffectiveAttackerId();
 
-            // 归属相同（自己人，或被自己弹珠撞飞的弹珠弹回）→ 忽略，避免误毁己方弹珠
-            if (attackerId == victim.GetEffectiveAttackerId())
+            // 真友军（同阵营）才忽略。不能用 GetEffectiveAttackerId 判阵营：
+            // 双方都会收到碰撞回调，受害方回调先写 lastAttackerId，攻击方回调随后
+            // 就会把刚写入的链 ID 误判成"同归属"（实测打中敌方小兵永不消除的根因）
+            if (attacker.ownerPlayerId == victim.ownerPlayerId)
             {
-                Debug.Log($"[HC] {gameObject.name}: 同归属忽略 attacker={attacker.gameObject.name}({attackerId}) victim={victim.gameObject.name}({victim.GetEffectiveAttackerId()})");
+                Debug.Log($"[HC] {gameObject.name}: 同阵营忽略 attacker={attacker.gameObject.name}({attacker.ownerPlayerId}) victim={victim.gameObject.name}({victim.ownerPlayerId})");
                 return;
             }
 

@@ -155,6 +155,9 @@ namespace Dapaolou.Game
             marbleData.marbleType = type;
             marbleData.ownerPlayerId = playerId;
             marbleData.towerIndex = (type == MarbleType.Tower) ? index : -1;
+
+            // 阵营标签：碰撞检测按阵营判定吃子
+            marbleObj.tag = "Team" + playerId;
             
             // 设置名称
             marbleObj.name = $"Player{playerId}_{type}_{index}";
