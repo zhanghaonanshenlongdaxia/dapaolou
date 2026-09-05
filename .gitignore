@@ -48,3 +48,7 @@ screenshots/
 Thumbs.db
 Desktop.ini
 鏈湴AI鐢熸垚鎿嶄綔鎵嬪唽.md
+
+# AI 生成的临时产物
+TempAIGen/
+Tools/__pycache__/
