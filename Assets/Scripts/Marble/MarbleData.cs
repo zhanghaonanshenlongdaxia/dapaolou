@@ -173,6 +173,21 @@ namespace Dapaolou.Marble
                 return;
             }
 
+            // 蠕动清零：被撞开的弹珠物理上在动但 state 仍是 Idle，不经过下面的 Rolling
+            // 刹停分支——接地且速度/角速度低到不可见就彻底清零，能量归零不再蠕动
+            if (!removing && state != MarbleState.Destroyed && rb != null
+                && rb.velocity.magnitude < 0.05f && rb.angularVelocity.magnitude < 0.05f
+                && Physics.Raycast(transform.position, Vector3.down, 0.06f))
+            {
+                rb.velocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+                if (state == MarbleState.Rolling)
+                {
+                    state = MarbleState.Idle;
+                    lastAttackerId = -1;     // 停下后攻击链结束
+                }
+            }
+
             // 滚动中的弹珠：低速直接刹停，避免长时间蠕动导致回合等待过久
             if (state == MarbleState.Rolling && rb != null)
             {
@@ -246,14 +261,26 @@ namespace Dapaolou.Marble
 
             // 恒定滚动减速度模型（台球式）：a=Crr·g·k，方向恒反向水平速度。
             // 替代 rb.drag 指数衰减——真实滚动阻力是恒力，与速度无关（Engineering Toolbox 实测表）。
+            // 旧版在 0.05m/s 以下不施力：配合永不睡眠（sleepThreshold=0），被撞开的 Idle 弹珠
+            // 会以 ~4cm/s 蠕动数个回合不停——现在本步能刹停就直接清零，能量单调衰减到 0
             if (removing || rb.IsSleeping()) return;
 
             Vector3 hv = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
-            if (hv.magnitude < 0.05f) return;   // 近静止不施力，让弹珠自然入睡
+            if (hv.magnitude <= 0.0001f) return;
             if (!Physics.Raycast(transform.position, Vector3.down, 0.06f)) return;   // 离地（弹跳/坠落）不受滚动阻力
 
             float decel = Terrain.TerrainEffectSystem.GetRollingDeceleration(currentTerrain);
-            rb.AddForce(-hv.normalized * (decel * rb.mass), ForceMode.Force);
+            float dv = decel * Time.fixedDeltaTime;
+            if (dv >= hv.magnitude)
+            {
+                // 本步足以刹停：直接清零水平速度，避免反向力在 0 附近抖动
+                rb.velocity = new Vector3(0f, rb.velocity.y, 0f);
+                rb.angularVelocity = Vector3.zero;
+            }
+            else
+            {
+                rb.AddForce(-hv.normalized * (decel * rb.mass), ForceMode.Force);
+            }
         }
 
         /// <summary>
