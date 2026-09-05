@@ -66,7 +66,13 @@ namespace Dapaolou.UI
                 gameManager.OnPlayerTurnEnd += OnTurnEnd;
                 gameManager.OnGameOver += OnGameOver;
             }
-            
+
+            // 再来一局按钮：代码接线（场景 persistentCalls 一直没配）
+            if (restartButton != null)
+            {
+                restartButton.onClick.AddListener(OnRestartButtonClicked);
+            }
+
             // 初始化UI
             InitializeUI();
         }

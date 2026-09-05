@@ -185,11 +185,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   terrainType: 0
   showDebugGizmos: 1
-  gizmoColor:
-    r: 1
-    g: 1
-    b: 1
-    a: 1
+  gizmoColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!23 &5339155
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -416,11 +412,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   terrainType: 0
   showDebugGizmos: 1
-  gizmoColor:
-    r: 1
-    g: 1
-    b: 1
-    a: 1
+  gizmoColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!23 &52891979
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -540,11 +532,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   terrainType: 0
   showDebugGizmos: 1
-  gizmoColor:
-    r: 1
-    g: 1
-    b: 1
-    a: 1
+  gizmoColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!23 &57901612
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -2569,6 +2557,53 @@ PrefabInstance:
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 3150474306388093854, guid: 22d34b5ef61aeef4f865e6e8eee30599,
     type: 3}
+--- !u!1 &304274129
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 304274131}
+  - component: {fileID: 304274130}
+  m_Layer: 0
+  m_Name: SoldierBeaconSystem
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &304274130
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 304274129}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1f47fd5e3d194f146bf2ae95df2f5e3a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  beamHeight: 40
+  beamDiameter: 0.5
+  beamAlpha: 0.45
+--- !u!4 &304274131
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 304274129}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &308074644
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -13697,3 +13732,4 @@ SceneRoots:
   - {fileID: 600578476}
   - {fileID: 75334627}
   - {fileID: 1981418909}
+  - {fileID: 304274131}
