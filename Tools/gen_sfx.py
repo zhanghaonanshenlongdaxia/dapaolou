@@ -103,6 +103,8 @@ def main():
         ("glass_shatter", "glass marble shattering into pieces, crisp clear glass breaking, short burst", 1.5),
         ("water_splash", "small object splashing into shallow water puddle, short splash, natural", 1.5),
         ("towerscatter", "small glass marbles scattering and bouncing on concrete floor, multiple short clicks", 2.0),
+        ("bounce_cement", "glass marble bouncing on hard concrete floor, sharp crisp tick click, single short bounce, clean one-shot", 1.0),
+        ("bounce_dirt", "glass marble bouncing on dry dirt ground, soft dull thud, single short bounce, natural one-shot", 1.0),
     ]
     for name, tags, dur in sfx_list:
         out = os.path.join(SAVE_DIR, f"{name}.wav")

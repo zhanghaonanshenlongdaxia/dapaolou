@@ -18,6 +18,11 @@ namespace Dapaolou.Marble
         [SerializeField] private AudioClip hitSound;               // 命中音效
         [SerializeField] private AudioClip destroySound;           // 摧毁音效
         
+        [Header("弹跳音效")]
+        [SerializeField] private float bounceMinForce = 0.5f;      // 弹跳发声最小力度（防滚动蹭地刷屏）
+        
+        private float lastBounceTime;                              // 弹跳发声防抖
+        
         private MarbleData marbleData;
         private AudioSource audioSource;
         private Vector3 lastSweepPos;           // 上一物理步位置（高速扫掠检测用）
@@ -79,10 +84,17 @@ namespace Dapaolou.Marble
             Debug.Log($"[COLLISION] {gameObject.name}@{transform.position.ToString("F2")} x {collision.gameObject.name} relV={relVec.magnitude:F2} relVec={relVec.ToString("F2")} normal={nrm.ToString("F2")} myVelAfter={myVel.ToString("F2")} layers={gameObject.layer}/{collision.gameObject.layer}");
             // 获取碰撞的弹珠
             MarbleData otherMarble = collision.gameObject.GetComponent<MarbleData>();
-            if (otherMarble == null) return;
 
             // 计算碰撞力度
             float impactForce = collision.relativeVelocity.magnitude;
+
+            // 非弹珠表面（水泥板/泥地/院墙）：每次弹跳按力度发声
+            if (otherMarble == null)
+            {
+                if (impactForce >= bounceMinForce)
+                    PlayBounceSound(collision.collider, impactForce);
+                return;
+            }
 
             // 忽略太轻的碰撞
             if (impactForce < minImpactForce) return;
@@ -254,6 +266,29 @@ namespace Dapaolou.Marble
             if (ownJoint != null) Destroy(ownJoint);
         }
         
+        /// <summary>
+        /// 弹跳音效：按碰撞表面分支——水泥板/院墙=硬面清脆声，地形=泥地闷响
+        /// </summary>
+        private void PlayBounceSound(Collider surface, float impactForce)
+        {
+            if (Audio.AudioManager.Instance == null) return;
+            if (Time.time - lastBounceTime < 0.05f) return;   // 同一次触地的多接触点只发一声
+            lastBounceTime = Time.time;
+
+            var mat = surface.sharedMaterial;
+            var matName = mat != null ? mat.name : string.Empty;
+            bool onCement;
+            if (matName.Contains("Dirt") || matName.Contains("Soft") || matName.Contains("Grass") || matName.Contains("Water"))
+                onCement = false;                              // 泥地/软面(干草垛)/水面 → 闷响
+            else if (matName.Contains("Cement") || matName.Contains("Wall") || matName.Contains("Stone") || matName.Contains("Brick"))
+                onCement = true;                               // 水泥板/院墙/砖石 → 清脆
+            else
+                onCement = !(surface is TerrainCollider);      // 无材质兜底：地形=泥地，其余硬物=硬面
+            float intensity = Mathf.Clamp01(impactForce / 8f);
+            Debug.Log($"[BOUNCE] {gameObject.name} x {surface.name} layer={surface.gameObject.layer} mat={matName} onCement={onCement} force={impactForce:F2}");
+            Audio.AudioManager.Instance.PlayBounce(onCement, intensity);
+        }
+
         /// <summary>
         /// 播放命中特效
         /// </summary>

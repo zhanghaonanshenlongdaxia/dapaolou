@@ -21,6 +21,8 @@ namespace Dapaolou.Audio
         [SerializeField] private AudioClip marbleFlick;     // 发射弹射
         [SerializeField] private AudioClip glassShatter;    // 玻璃碎裂
         [SerializeField] private AudioClip waterSplash;     // 入水声
+        [SerializeField] private AudioClip bounceCement;    // 水泥地弹跳（清脆）
+        [SerializeField] private AudioClip bounceDirt;      // 泥土地弹跳（闷响）
 
         [Range(0f, 1f)] public float sfxVolume = 0.7f;
 
@@ -127,6 +129,16 @@ namespace Dapaolou.Audio
         {
             if (waterSplash != null)
                 sfxSource.PlayOneShot(waterSplash, sfxVolume);
+        }
+
+        /// <summary>
+        /// 播放弹珠落地弹跳音效（onCement=水泥等硬面清脆声，否则泥地闷响）
+        /// </summary>
+        public void PlayBounce(bool onCement, float intensity = 1f)
+        {
+            var clip = onCement ? bounceCement : bounceDirt;
+            if (clip != null)
+                sfxSource.PlayOneShot(clip, Mathf.Clamp01(intensity) * sfxVolume);
         }
 
         /// <summary>
