@@ -56,6 +56,8 @@ namespace Dapaolou.Marble
                     if (otherData == null || otherData == marbleData) continue;
                     if (otherData.state == MarbleState.Destroyed) continue;
                     float impactForce = (rb.velocity - otherData.GetComponent<Rigidbody>().velocity).magnitude;
+                    // 与 OnCollisionEnter 同一力度门槛：静止弹珠被物理抖动蹭到不算命中
+                    if (impactForce < minImpactForce) continue;
                     HandleCollision(otherData, impactForce, h.point);
                     break;   // 每步只处理一次命中
                 }
@@ -110,14 +112,6 @@ namespace Dapaolou.Marble
                 victim = marbleData;
             }
 
-            // 攻击方已停下的旧弹珠蹭到人不产生吃子（发射戳是永久的，只有滚动中的
-            // 发射弹珠才算"这一击"）
-            if (attacker.state == MarbleState.Idle)
-            {
-                Debug.Log($"[HC] {gameObject.name}: 攻击方已静止跳过 {attacker.gameObject.name} x {victim.gameObject.name}");
-                return;
-            }
-            
             // 有效攻击归属（连环碰撞：被撞飞的弹珠代表把它撞飞的玩家）
             int attackerId = attacker.GetEffectiveAttackerId();
 
