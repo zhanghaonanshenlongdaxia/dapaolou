@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Dapaolou.Game;
 
@@ -14,6 +15,12 @@ namespace Dapaolou.Audio
         [SerializeField] private AudioSource bgmSource;
         [SerializeField] private AudioClip bgmClip;
         [Range(0f, 1f)] public float bgmVolume = 0.4f;
+
+        [Header("BGM 播放列表")]
+        [SerializeField] private List<AudioClip> bgmPlaylist = new List<AudioClip>();
+
+        private int bgmIndex = -1;
+        private bool bgmPaused;
 
         [Header("音效片段")]
         [SerializeField] private AudioClip marbleHit;       // 弹珠互撞
@@ -59,10 +66,77 @@ namespace Dapaolou.Audio
 
         void Start()
         {
-            // 播放 BGM
-            if (bgmSource != null && bgmSource.clip != null)
+            // 播放 BGM：有播放列表则从第一首开始轮换，否则退回单曲循环
+            if (bgmPlaylist != null && bgmPlaylist.Count > 0)
+            {
+                bgmSource.loop = false;
+                PlayBgmByIndex(0);
+            }
+            else if (bgmSource != null && bgmSource.clip != null)
+            {
                 bgmSource.Play();
+            }
         }
+
+        void Update()
+        {
+            // 曲终自动轮换下一首（手动暂停时不触发）
+            if (!bgmPaused && bgmPlaylist.Count > 1 && bgmSource.clip != null && !bgmSource.isPlaying)
+                PlayBgmByIndex(bgmIndex + 1);
+        }
+
+        /// <summary>
+        /// 按索引播放 BGM（越界自动循环）
+        /// </summary>
+        public void PlayBgmByIndex(int index)
+        {
+            if (bgmPlaylist == null || bgmPlaylist.Count == 0 || bgmSource == null) return;
+            bgmIndex = ((index % bgmPlaylist.Count) + bgmPlaylist.Count) % bgmPlaylist.Count;
+            var clip = bgmPlaylist[bgmIndex];
+            if (clip == null) return;
+            bgmClip = clip;
+            bgmSource.clip = clip;
+            bgmSource.loop = false;
+            bgmPaused = false;
+            bgmSource.Play();
+        }
+
+        /// <summary>
+        /// 下一首
+        /// </summary>
+        public void NextBgm() => PlayBgmByIndex(bgmIndex + 1);
+
+        /// <summary>
+        /// 上一首
+        /// </summary>
+        public void PrevBgm() => PlayBgmByIndex(bgmIndex - 1);
+
+        /// <summary>
+        /// 暂停/继续当前 BGM
+        /// </summary>
+        public void ToggleBgmPause()
+        {
+            if (bgmSource == null || bgmSource.clip == null) return;
+            if (bgmPaused) bgmSource.UnPause();
+            else bgmSource.Pause();
+            bgmPaused = !bgmPaused;
+        }
+
+        /// <summary>
+        /// 当前曲名（去 bgm_ 前缀）
+        /// </summary>
+        public string CurrentBgmName()
+        {
+            var clip = bgmSource != null ? bgmSource.clip : null;
+            if (clip == null) return "无";
+            var n = clip.name;
+            return n.StartsWith("bgm_") ? n.Substring(4) : n;
+        }
+
+        /// <summary>
+        /// BGM 是否处于暂停
+        /// </summary>
+        public bool IsBgmPaused => bgmPaused;
 
         /// <summary>
         /// 设置 BGM 音频文件（运行时加载）
