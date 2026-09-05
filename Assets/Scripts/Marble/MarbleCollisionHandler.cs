@@ -71,7 +71,12 @@ namespace Dapaolou.Marble
 
         void OnCollisionEnter(Collision collision)
         {
-            Debug.Log($"[COLLISION] {gameObject.name} x {collision.gameObject.name} relV={collision.relativeVelocity.magnitude:F2} layers={gameObject.layer}/{collision.gameObject.layer}");
+            var md = GetComponent<MarbleData>();
+            var mdRb = md != null ? md.GetComponent<Rigidbody>() : null;
+            Vector3 relVec = collision.relativeVelocity;
+            Vector3 nrm = collision.contacts.Length > 0 ? collision.contacts[0].normal : Vector3.zero;
+            Vector3 myVel = mdRb != null ? mdRb.velocity : Vector3.zero;
+            Debug.Log($"[COLLISION] {gameObject.name}@{transform.position.ToString("F2")} x {collision.gameObject.name} relV={relVec.magnitude:F2} relVec={relVec.ToString("F2")} normal={nrm.ToString("F2")} myVelAfter={myVel.ToString("F2")} layers={gameObject.layer}/{collision.gameObject.layer}");
             // 获取碰撞的弹珠
             MarbleData otherMarble = collision.gameObject.GetComponent<MarbleData>();
             if (otherMarble == null) return;

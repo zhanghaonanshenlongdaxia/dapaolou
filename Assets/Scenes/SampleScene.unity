@@ -185,7 +185,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   terrainType: 0
   showDebugGizmos: 1
-  gizmoColor: {r: 1, g: 1, b: 1, a: 1}
+  gizmoColor:
+    r: 1
+    g: 1
+    b: 1
+    a: 1
 --- !u!23 &5339155
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -412,7 +416,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   terrainType: 0
   showDebugGizmos: 1
-  gizmoColor: {r: 1, g: 1, b: 1, a: 1}
+  gizmoColor:
+    r: 1
+    g: 1
+    b: 1
+    a: 1
 --- !u!23 &52891979
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -532,7 +540,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   terrainType: 0
   showDebugGizmos: 1
-  gizmoColor: {r: 1, g: 1, b: 1, a: 1}
+  gizmoColor:
+    r: 1
+    g: 1
+    b: 1
+    a: 1
 --- !u!23 &57901612
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -9372,7 +9384,7 @@ TerrainCollider:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1981418906}
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 13400000, guid: 56550e879c2c7eb44a901302fbce41c0, type: 2}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
