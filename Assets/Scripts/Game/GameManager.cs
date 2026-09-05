@@ -477,6 +477,12 @@ namespace Dapaolou.Game
             }
             
             OnMarbleDestroyed?.Invoke(attacker, victim);
+
+            // 击杀即时结算：胜利检查不能只挂在回合结束——回合结束依赖弹珠全部滚停，
+            // 卡住时团灭后面板永远不弹（实测复现：IsDefeated=True 但 15s 不结算）。
+            // Playing 阶段才检查，防 GameOver 后重复触发
+            if (currentPhase == GamePhase.Playing)
+                CheckVictoryCondition();
         }
         
         /// <summary>
