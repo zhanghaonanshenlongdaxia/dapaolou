@@ -22,6 +22,7 @@ namespace Dapaolou.Marble
         private AudioSource audioSource;
         private Vector3 lastSweepPos;           // 上一物理步位置（高速扫掠检测用）
         private bool sweepPrevValid = false;
+        private float sweepRadius;              // 扫掠球半径=弹珠自身碰撞体（不放大，擦边不算命中）
 
         void Awake()
         {
@@ -31,13 +32,16 @@ namespace Dapaolou.Marble
             {
                 audioSource = gameObject.AddComponent<AudioSource>();
             }
+            var col = GetComponent<SphereCollider>();
+            sweepRadius = col != null ? col.radius * transform.lossyScale.x : 0.025f;
             lastSweepPos = transform.position;
         }
 
         void FixedUpdate()
         {
             // 高速弹珠扫掠检测：离散步进在 10+ m/s 时会穿透 5cm 目标（27cm/步），
-            // 用球形扫掠补上物理引擎漏掉的接触
+            // 用与弹珠等半径的球形扫掠补上物理引擎漏掉的接触——
+            // 半径取弹珠自身碰撞体，命中宽度=两珠半径之和，恰好接触才算
             if (marbleData == null || marbleData.state != MarbleState.Rolling) { sweepPrevValid = false; return; }
             var rb = marbleData.GetComponent<Rigidbody>();
             if (rb == null || rb.isKinematic) { sweepPrevValid = false; return; }
@@ -49,7 +53,7 @@ namespace Dapaolou.Marble
             float dist = move.magnitude;
             if (dist > 0.02f)
             {
-                var hits = Physics.SphereCastAll(lastSweepPos, 0.03f, move.normalized, dist + 0.02f);
+                var hits = Physics.SphereCastAll(lastSweepPos, sweepRadius, move.normalized, dist + 0.005f);
                 foreach (var h in hits)
                 {
                     var otherData = h.collider.GetComponent<MarbleData>();

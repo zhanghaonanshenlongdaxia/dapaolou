@@ -90,9 +90,10 @@ namespace Dapaolou.Marble
             rb.mass = baseMass;
             rb.drag = 0f;                  // 空气阻力忽略；滚动阻力走恒定减速度模型（FixedUpdate）
             rb.angularDrag = 0.2f;         // 旋转阻力调低，保留玻璃的滚动感
-            // 推测式 CCD：扫掠式(ContinuousDynamic)对动态刚体不生效，18cm/步会直接穿过
-            // 5cm 的敌方弹珠（实测直射无碰撞）——Speculative 对动态配对也做预测检测
-            rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+            // 扫掠式 CCD：对静态墙地精确防穿透。动态×弹珠的穿透由 MarbleCollisionHandler
+            // 的等半径球形扫掠兜底——Speculative 会按"速度×步长"膨胀碰撞圈（9.8m/s 时
+            // 比弹珠本体大 4 倍），擦身而过也触发命中（实测从两小兵缝隙穿过却判双吃）
+            rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             rb.sleepThreshold = 0f;        // 永不睡眠：睡眠刚体会被高速弹珠穿透（CCD 不检测睡眠对）
 

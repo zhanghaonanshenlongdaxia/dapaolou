@@ -597,8 +597,7 @@ namespace Dapaolou.Marble
             {
                 rb.isKinematic = false;
                 // isKinematic 赋值会重建 PhysX actor 并丢失 CCD 配对，必须重新指定连续碰撞检测
-                // Speculative：动态×动态配对也生效（扫掠式只对静态可靠，实测直射会穿过敌方弹珠）
-                rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+                rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
                 rb.WakeUp();
                 // VelocityChange：力度即出膛速度(m/s)，与手册"力度>5 打爆"判定一致，
                 // 避免 Impulse 在轻质量弹珠上产生数百 m/s 的荒谬速度
