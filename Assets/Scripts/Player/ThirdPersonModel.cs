@@ -197,26 +197,58 @@ namespace Dapaolou.Player
         #region 阵营标识
         
         /// <summary>
-        /// 创建头顶阵营标识小球：无碰撞、无阴影，Unlit 材质保证远处也醒目
+        /// 创建头顶阵营标识锥：尖朝下悬在头顶，无碰撞、无阴影，Unlit 材质保证远处也醒目
         /// </summary>
         private void CreateFactionMarker()
         {
-            GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            marker.name = "FactionMarker";
-            Collider col = marker.GetComponent<Collider>();
-            if (col != null) Destroy(col);
+            GameObject marker = new GameObject("FactionMarker");
+            marker.AddComponent<MeshFilter>().sharedMesh = CreateConeMesh(0.26f, 0.085f);
+            Renderer r = marker.AddComponent<MeshRenderer>();
             marker.transform.SetParent(transform, false);
             marker.transform.localPosition = new Vector3(0f, markerHeight, 0f);
-            marker.transform.localScale = Vector3.one * markerSize;
+            marker.transform.localScale = Vector3.one;
             
             markerMaterial = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
             markerMaterial.SetColor("_BaseColor", playerColor);
-            Renderer r = marker.GetComponent<Renderer>();
+            // 双面渲染：手搓锥体网格不纠结三角形绕序，正反都可见
+            if (markerMaterial.HasProperty("_CullMode")) markerMaterial.SetFloat("_CullMode", 0f);
             r.sharedMaterial = markerMaterial;
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             r.receiveShadows = false;
             
             factionMarker = marker.transform;
+        }
+
+        /// <summary>
+        /// 程序化锥体网格：尖端在原点(y=0) 朝下，底面朝上
+        /// </summary>
+        private Mesh CreateConeMesh(float height, float radius)
+        {
+            const int segments = 14;
+            var verts = new System.Collections.Generic.List<Vector3>();
+            var tris = new System.Collections.Generic.List<int>();
+
+            verts.Add(Vector3.zero);                        // 0 = 尖端
+            for (int i = 0; i <= segments; i++)
+            {
+                float a = i / (float)segments * Mathf.PI * 2f;
+                verts.Add(new Vector3(Mathf.Cos(a) * radius, height, Mathf.Sin(a) * radius));
+            }
+            verts.Add(new Vector3(0f, height, 0f));          // 底面圆心
+            int cap = verts.Count - 1;
+
+            for (int i = 1; i <= segments; i++)
+            {
+                tris.Add(0); tris.Add(i + 1); tris.Add(i);   // 侧面
+                tris.Add(cap); tris.Add(i); tris.Add(i + 1); // 底面
+            }
+
+            var mesh = new Mesh();
+            mesh.SetVertices(verts);
+            mesh.SetTriangles(tris, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
         }
         
         #endregion
