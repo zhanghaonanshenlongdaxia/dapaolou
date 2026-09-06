@@ -268,6 +268,37 @@ namespace Dapaolou.Player
         }
 
         /// <summary>
+        /// 站位合法性（静态点检测）：高度差<0.5m、不与障碍碰撞体重叠、到弹珠出手线通视。
+        /// 候选点出发前先预检，非法的直接跳过不浪费走位时间
+        /// </summary>
+        private bool IsSpotLegalAt(Vector3 spot, MarbleData marble)
+        {
+            if (Mathf.Abs(spot.y - marble.transform.position.y) > 0.5f) return false;
+
+            // 站位不能与障碍碰撞体重叠（半个身子进墙=视觉穿模）
+            foreach (var col in Physics.OverlapSphere(spot + Vector3.up * 0.6f, 0.4f))
+            {
+                if (col.GetComponent<MarbleData>() != null) continue;
+                if (col is CharacterController) continue;
+                if (col.transform.root == transform.root) continue;
+                if (col is TerrainCollider) continue;   // 地面不算
+                return false;
+            }
+
+            Vector3 start = spot + Vector3.up * 0.8f;
+            Vector3 end = marble.transform.position + Vector3.up * 0.03f;
+            Vector3 dir = end - start;
+            foreach (var h in Physics.RaycastAll(start, dir, dir.magnitude))
+            {
+                if (h.collider.GetComponent<MarbleData>() != null) continue;  // 弹珠本体
+                if (h.collider is CharacterController) continue;              // 玩家胶囊
+                if (h.collider.transform.root == transform.root) continue;   // 自己身上
+                return false;                                                 // 有障碍挡住出手线
+            }
+            return true;
+        }
+
+        /// <summary>
         /// AI 回合流程：决策先行——弹珠远（>3m）不思考直接跑过去；近则踱步观察（3~5轮）→
         /// 走到发射站位（正后方→斜后→侧边候选点）→ 转身半跪 → 发射 → 弹珠特写
         /// </summary>
@@ -381,19 +412,25 @@ namespace Dapaolou.Player
             }
             if (!turnActive || gm.GetCurrentPhase() != GamePhase.Playing) yield break;
 
-            // ==== 发射站位：正后方→斜后→侧边候选点；被高障碍挡住走不到就换下一个 ====
+            // ==== 发射站位：正后方→斜后→侧边候选点；先预检合法性再走，被挡就换 ====
             // （矮障碍物 CharacterController 的 stepOffset 会自动踩上去）
             bool inPosition = false;
             Vector3 usedSpot = Vector3.zero;
             Vector3 moveDir2 = Vector3.zero;
-            float[] spotAngles = { 0f, 25f, -25f, 50f, -50f, 80f, -80f };
+            float[] spotAngles = { 0f, 25f, -25f, 50f, -50f, 80f, -80f, 110f, -110f };
             foreach (var ang in spotAngles)
             {
                 if (!turnActive) break;
                 Vector3 spotDir = Quaternion.AngleAxis(ang, Vector3.up) * aimFlat.normalized;
-                Vector3 spot = marble.transform.position - spotDir * 0.95f;
+                // 1.3m 半径：贴墙弹珠的候选点也离得开墙（仍<1.5m 射程）
+                Vector3 spot = marble.transform.position - spotDir * 1.3f;
+                if (!IsSpotLegalAt(spot, marble))
+                {
+                    Debug.Log($"[AI] spot: angle {ang} precheck ILLEGAL, skip");
+                    continue;   // 预检非法直接跳过，不浪费走位时间
+                }
                 float walkT = 0f;
-                float maxWalk = farMarble ? 8f : 4f;
+                float maxWalk = farMarble ? 4f : 3f;
                 while (FlatDist(transform.position, spot) > 0.2f && walkT < maxWalk && turnActive)
                 {
                     Vector3 flatDelta = spot - transform.position;
@@ -408,21 +445,37 @@ namespace Dapaolou.Player
                     walkT += Time.deltaTime;
                     yield return null;
                 }
-                if (FlatDist(transform.position, spot) <= 0.28f)
+                if (FlatDist(transform.position, spot) <= 0.28f && IsSpotLegalAt(transform.position, marble))
                 {
                     inPosition = true;
                     usedSpot = spot;
-                    Debug.Log($"[AI] spot: angle {ang} reached in {walkT:F1}s");
+                    Debug.Log($"[AI] spot: angle {ang} reached in {walkT:F1}s (legal)");
                     break;
                 }
                 if (walkT >= maxWalk) Debug.Log($"[AI] spot: angle {ang} BLOCKED, trying next");
-                // 走不到（被墙/房子挡住）→ 换下一个角度
+                // 走不到或站着不合法 → 换下一个角度
             }
             if (!turnActive) yield break;
             if (!inPosition)
             {
-                // 全部候选点都到不了（罕见）：仍从原地发射，防止回合卡死
-                Debug.Log($"[AI] Player {playerId}: no firing spot reached, firing anyway");
+                // 全部候选点失败（罕见）：退回开阔地再弹，防止卡在墙里/障碍上发射
+                Debug.Log($"[AI] Player {playerId}: no legal firing spot, retreating to open ground");
+                Vector3 away = transform.position - marble.transform.position;
+                away.y = 0f;
+                Vector3 retreat = transform.position + away.normalized * 1.5f;
+                float rt = 0f;
+                while (FlatDist(transform.position, retreat) > 0.3f && rt < 2f && turnActive)
+                {
+                    Vector3 flatDelta = retreat - transform.position;
+                    flatDelta.y = 0f;
+                    Vector3 step = flatDelta.normalized * 1.5f * Time.deltaTime + Physics.gravity * Time.deltaTime;
+                    if (cc != null) cc.Move(step);
+                    else transform.position += step;
+                    transform.rotation = Quaternion.Slerp(transform.rotation,
+                        Quaternion.LookRotation(flatDelta.normalized), Time.deltaTime * 6f);
+                    rt += Time.deltaTime;
+                    yield return null;
+                }
             }
 
             // 站定后平滑转身正对发射方向，停顿后再弹
