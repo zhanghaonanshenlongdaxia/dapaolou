@@ -74,18 +74,21 @@ namespace Dapaolou.Player
         private bool footCalibrated = false;
 
         // 反应姿态（程序化骨骼叠加，LateUpdate 在 Animator 之后可安全覆盖）
-        public enum ReactionType { None, Sad, Cheer }
+        public enum ReactionType { None, Sad, Cheer, IdleGesture }
         private ReactionType reactionType = ReactionType.None;
         private float reactionTimer = 0f;
         private float reactionDuration = 0f;
         private float reactionBlend = 0f;
         private bool crouching = false;
         private float crouchBlend = 0f;
+        private float idleTimer = 0f;
+        private float nextIdleGesture = 9f;
 
         // 骨骼缓存
         private Transform hipsBone, spineBone, headBone;
         private Transform upperArmL, upperArmR, forearmL, forearmR;
         private Transform thighL, thighR, shinL, shinR;
+        private Transform handL, handR, footL, footR;
         
         public enum AnimatorState
         {
@@ -186,7 +189,20 @@ namespace Dapaolou.Player
             {
                 SetState(AnimatorState.Idle);
             }
-            
+
+            // 站太久了随机做个张望小动作，增加生气
+            if (currentState == AnimatorState.Idle && reactionType == ReactionType.None && !crouching)
+            {
+                idleTimer += Time.deltaTime;
+                if (idleTimer > nextIdleGesture)
+                {
+                    PlayIdleGesture();
+                    idleTimer = 0f;
+                    nextIdleGesture = Random.Range(7f, 12f);
+                }
+            }
+            else idleTimer = 0f;
+
             ApplyRiggedClip();
         }
         
@@ -264,7 +280,15 @@ namespace Dapaolou.Player
             reactionDuration = duration;
         }
 
-        /// <summary>半蹲蓄力（弹弹珠前）</summary>
+        /// <summary>待机张望：站久了左右看看，增加生气</summary>
+        public void PlayIdleGesture()
+        {
+            reactionType = ReactionType.IdleGesture;
+            reactionTimer = 0f;
+            reactionDuration = 2.2f;
+        }
+
+        /// <summary>半跪蓄力（跪射俑式：一膝着地，一手弹弹珠）</summary>
         public void SetCrouching(bool on)
         {
             crouching = on;
@@ -284,6 +308,10 @@ namespace Dapaolou.Player
             thighR = modelAnimator.GetBoneTransform(HumanBodyBones.RightUpperLeg);
             shinL = modelAnimator.GetBoneTransform(HumanBodyBones.LeftLowerLeg);
             shinR = modelAnimator.GetBoneTransform(HumanBodyBones.RightLowerLeg);
+            handL = modelAnimator.GetBoneTransform(HumanBodyBones.LeftHand);
+            handR = modelAnimator.GetBoneTransform(HumanBodyBones.RightHand);
+            footL = modelAnimator.GetBoneTransform(HumanBodyBones.LeftFoot);
+            footR = modelAnimator.GetBoneTransform(HumanBodyBones.RightFoot);
         }
 
         /// <summary>把骨骼当前的肢体朝向往目标方向掰 blend 比例（世界空间，不依赖绑定轴）</summary>
@@ -333,19 +361,23 @@ namespace Dapaolou.Player
 
             if (crouchBlend <= 0f && reactionBlend <= 0f) return;
 
-            // ==== 半蹲蓄力 ====
+            // ==== 半跪蓄力（跪射俑式：右膝着地，左手撑、右手前伸待弹）====
             if (crouchBlend > 0f)
             {
                 float b = crouchBlend;
                 Vector3 fwd = transform.root != null ? transform.root.forward : Vector3.forward;
-                if (hipsBone != null) hipsBone.position += Vector3.down * (0.13f * b);
-                // 大腿前抬+小腿后收，保持脚掌大致贴地
-                BendLimb(thighL, shinL, fwd * 0.7f + Vector3.down * 0.7f, b);
-                BendLimb(thighR, shinR, fwd * 0.7f + Vector3.down * 0.7f, b);
-                BendLimb(shinL, modelAnimator.GetBoneTransform(HumanBodyBones.LeftFoot), -fwd * 0.5f + Vector3.down * 0.85f, b);
-                BendLimb(shinR, modelAnimator.GetBoneTransform(HumanBodyBones.RightFoot), -fwd * 0.5f + Vector3.down * 0.85f, b);
-                RotateBone(spineBone, 14f, 0f, 0f, b);
-                RotateBone(headBone, -8f, 0f, 0f, b);
+                if (hipsBone != null) hipsBone.position += Vector3.down * (0.32f * b);
+                // 右腿跪地：大腿竖直向下，小腿贴地朝后
+                BendLimb(thighR, shinR, Vector3.down - fwd * 0.05f, b);
+                BendLimb(shinR, footR, -fwd * 0.98f + Vector3.down * 0.08f, b);
+                // 左腿向前屈膝弓步（脚掌着地）
+                BendLimb(thighL, shinL, fwd * 0.65f + Vector3.down * 0.76f, b);
+                BendLimb(shinL, footL, fwd * 0.97f + Vector3.down * 0.26f, b);
+                // 上身微前倾、看着弹珠，右手前伸待弹
+                RotateBone(spineBone, 10f, 0f, 0f, b);
+                RotateBone(headBone, 18f, 0f, 0f, b);
+                BendLimb(upperArmR, forearmR, fwd * 0.8f + Vector3.down * 0.6f, b);
+                BendLimb(forearmR, handR, fwd * 0.85f + Vector3.down * 0.5f, b);
             }
 
             // ==== 沮丧 ====
@@ -353,8 +385,8 @@ namespace Dapaolou.Player
             {
                 float b = reactionBlend;
                 float sway = Mathf.Sin(reactionTimer * 1.5f) * 6f;
-                RotateBone(headBone, 30f, sway, 0f, b);
-                RotateBone(spineBone, 12f, 0f, 0f, b);
+                RotateBone(headBone, 38f, sway, 0f, b);
+                RotateBone(spineBone, 16f, 0f, 0f, b);
                 // 手臂无力前垂
                 BendLimb(upperArmL, forearmL, Vector3.down + transform.root.forward * 0.35f, b * 0.5f);
                 BendLimb(upperArmR, forearmR, Vector3.down + transform.root.forward * 0.35f, b * 0.5f);
@@ -364,7 +396,7 @@ namespace Dapaolou.Player
             if (reactionType == ReactionType.Cheer && reactionBlend > 0f)
             {
                 float b = reactionBlend;
-                float hop = Mathf.Abs(Mathf.Sin(reactionTimer * 8f)) * 0.12f;
+                float hop = Mathf.Abs(Mathf.Sin(reactionTimer * 8f)) * 0.16f;
                 if (hipsBone != null) hipsBone.position += Vector3.up * (hop * b);
                 Transform rootT = transform.root != null ? transform.root : transform;
                 // 举臂过头（沿角色左右略外张）
@@ -372,6 +404,15 @@ namespace Dapaolou.Player
                 BendLimb(upperArmR, forearmR, Vector3.up + rootT.right * 0.25f, b);
                 RotateBone(headBone, -18f, 0f, 0f, b);
                 RotateBone(spineBone, -6f, 0f, 0f, b);
+            }
+
+            // ==== 待机张望 ====
+            if (reactionType == ReactionType.IdleGesture && reactionBlend > 0f)
+            {
+                float b = reactionBlend;
+                float look = Mathf.Sin(reactionTimer * 1.6f) * 34f;
+                RotateBone(headBone, 6f, look, 0f, b);
+                RotateBone(spineBone, 0f, look * 0.25f, 0f, b);
             }
         }
 

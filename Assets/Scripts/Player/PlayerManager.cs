@@ -76,6 +76,7 @@ namespace Dapaolou.Player
                 GameManager.Instance.OnPlayerTurnStart += OnTurnStart;
                 GameManager.Instance.OnPlayerTurnEnd += OnTurnEnd;
                 GameManager.Instance.OnMarbleDestroyed += OnMarbleDestroyedReaction;
+                GameManager.Instance.OnGameOver += OnGameOverReaction;
             }
             
             // 订阅射击事件
@@ -366,6 +367,16 @@ namespace Dapaolou.Player
                 thirdPersonModel.PlayCheer();
             }
         }
+
+        /// <summary>
+        /// 游戏结束：赢家欢呼、输家沮丧（人物模型加戏）
+        /// </summary>
+        private void OnGameOverReaction(int winnerId)
+        {
+            if (thirdPersonModel == null) return;
+            if (winnerId == playerId) thirdPersonModel.PlayCheer(5f);
+            else thirdPersonModel.PlaySad(6f);
+        }
         
         private void OnTurnStart(int playerIndex)
         {
@@ -512,6 +523,7 @@ namespace Dapaolou.Player
                 GameManager.Instance.OnPlayerTurnStart -= OnTurnStart;
                 GameManager.Instance.OnPlayerTurnEnd -= OnTurnEnd;
                 GameManager.Instance.OnMarbleDestroyed -= OnMarbleDestroyedReaction;
+                GameManager.Instance.OnGameOver -= OnGameOverReaction;
             }
             
             if (marbleShooter != null)

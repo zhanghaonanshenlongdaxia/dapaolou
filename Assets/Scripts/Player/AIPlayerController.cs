@@ -200,6 +200,69 @@ namespace Dapaolou.Player
         }
 
         /// <summary>
+        /// 威胁评估：离我方炮楼最近的敌方存活小兵，3m 内视为威胁
+        /// </summary>
+        private MarbleData FindTowerThreat(PlayerData enemy, PlayerData own)
+        {
+            if (enemy == null || own == null || own.towerDestroyed) return null;
+            MarbleData threat = null;
+            float bestDist = float.MaxValue;
+            foreach (var s in enemy.soldierMarbles)
+            {
+                if (s == null || s.state == MarbleState.Destroyed) continue;
+                float d = FlatDist(s.transform.position, own.towerCenter);
+                if (d < bestDist) { bestDist = d; threat = s; }
+            }
+            return bestDist < 3f ? threat : null;
+        }
+
+        private static float FlatDist(Vector3 a, Vector3 b)
+        {
+            Vector3 d = a - b; d.y = 0f;
+            return d.magnitude;
+        }
+
+        /// <summary>
+        /// 选弹决策：威胁小兵在 3m 内→用离它最近的我方小兵吃它（需 4.5m 内可直接弹到）；
+        /// 否则用离敌方炮楼最近的我方小兵打炮楼
+        /// </summary>
+        private MarbleData PickFlickMarble(PlayerData own, PlayerData enemy, out Vector3 targetPos, out bool eating)
+        {
+            targetPos = enemy.towerCenter;
+            eating = false;
+
+            MarbleData threat = FindTowerThreat(enemy, own);
+            if (threat != null)
+            {
+                MarbleData counter = null;
+                float counterDist = float.MaxValue;
+                foreach (var s in own.soldierMarbles)
+                {
+                    if (s == null || s.state == MarbleState.Destroyed) continue;
+                    float d = FlatDist(s.transform.position, threat.transform.position);
+                    if (d < counterDist) { counterDist = d; counter = s; }
+                }
+                if (counter != null && counterDist <= 4.5f)
+                {
+                    targetPos = threat.transform.position;
+                    eating = true;
+                    return counter;
+                }
+            }
+
+            // 默认：离敌方炮楼最近的我方小兵打炮楼
+            MarbleData best = null;
+            float bestD = float.MaxValue;
+            foreach (var s in own.soldierMarbles)
+            {
+                if (s == null || s.state == MarbleState.Destroyed) continue;
+                float d = FlatDist(s.transform.position, enemy.towerCenter);
+                if (d < bestD) { bestD = d; best = s; }
+            }
+            return best;
+        }
+
+        /// <summary>
         /// AI 回合流程：来回踱步观察（3~5轮：随机安全方向走一段→停下转身盯炮楼/小兵~1s）→ 选弹珠 → 走到弹珠后方 → 确定方向力度 → 发射 → 弹珠特写
         /// </summary>
         private IEnumerator TakeTurn()
@@ -218,6 +281,7 @@ namespace Dapaolou.Player
             var cc = GetComponent<CharacterController>();
             var enemyData = gm.GetPlayer((playerId + 1) % 2);
             var ownData = gm.GetPlayer(playerId);
+            MarbleData threat = FindTowerThreat(enemyData, ownData);   // 首轮观察优先盯威胁
 
             for (int round = 0; round < observeRounds; round++)
             {
@@ -247,8 +311,10 @@ namespace Dapaolou.Player
                     }
                 }
 
-                // 2) 停下转身面对观察目标（首轮优先自家炮楼，之后炮楼/双方小兵随机）
-                Vector3? target = PickObservationTarget(enemyData, ownData, round == 0);
+                // 2) 停下转身面对观察目标（首轮盯威胁小兵或自家炮楼，之后炮楼/双方小兵随机）
+                Vector3? target = round == 0 && threat != null
+                    ? threat.transform.position
+                    : PickObservationTarget(enemyData, ownData, round == 0);
                 if (target.HasValue)
                 {
                     Vector3 lookFlat = target.Value - transform.position;
@@ -279,20 +345,29 @@ namespace Dapaolou.Player
             }
             if (!turnActive || gm.GetCurrentPhase() != GamePhase.Playing) yield break;
 
-            // 选择弹珠（优先小兵）
-            var marbles = gm.GetPlayer(playerId)?.GetAvailableMarbles();
-            if (marbles == null || marbles.Count == 0)
-            {
-                Debug.Log($"[AI] Player {playerId}: no available marbles, skip");
-                yield break;
-            }
-            var marble = marbles[0];
+            // 选弹决策：威胁小兵→吃子反制；否则打敌方炮楼
             var enemy = gm.GetPlayer((playerId + 1) % 2);
             if (enemy == null) yield break;
+            Vector3 targetPos;
+            bool eating;
+            var marble = PickFlickMarble(ownData, enemyData, out targetPos, out eating);
+            if (marble == null)
+            {
+                // 无小兵可用时兜底走旧接口（如只剩炮楼弹珠可拆）
+                var marbles = gm.GetPlayer(playerId)?.GetAvailableMarbles();
+                if (marbles == null || marbles.Count == 0)
+                {
+                    Debug.Log($"[AI] Player {playerId}: no available marbles, skip");
+                    yield break;
+                }
+                marble = marbles[0];
+                targetPos = enemy.towerCenter;
+                eating = false;
+            }
 
             // 走到要弹的弹珠正后方（射线上，距弹珠 0.9m，在 1.5m 射程内）；
             // 超时放宽到 10s——弹珠远时 3s 走不完会半路开火（远程弹珠 bug）
-            Vector3 aimFlat = enemy.towerCenter - marble.transform.position;
+            Vector3 aimFlat = targetPos - marble.transform.position;
             aimFlat.y = 0f;
             Vector3 behindSpot = marble.transform.position - aimFlat.normalized * 0.9f;
             float wt = 0f;
@@ -328,8 +403,8 @@ namespace Dapaolou.Player
                 yield break;
             }
 
-            // 随机力度
-            float power = Random.Range(powerRange.x, powerRange.y);
+            // 吃子要力度足；打炮楼用常规范围
+            float power = eating ? Random.Range(0.9f, 1.0f) : Random.Range(powerRange.x, powerRange.y);
 
             // 统一走 GameManager 接线的发射器（回合流程依赖其事件）
             var shooter = gm.ActiveShooter != null ? gm.ActiveShooter : GetComponent<MarbleShooter>();
@@ -339,8 +414,8 @@ namespace Dapaolou.Player
                 yield break;
             }
 
-            // 瞄准敌方炮楼：弹道仰角补偿重力下坠，并额外 +1.5m 距离补偿空气阻力造成的射程衰减
-            Vector3 toTarget = enemy.towerCenter - marble.transform.position;
+            // 瞄准目标（敌方炮楼或威胁小兵）：弹道仰角补偿重力下坠，并额外 +1.5m 距离补偿空气阻力造成的射程衰减
+            Vector3 toTarget = targetPos - marble.transform.position;
             float dist = new Vector3(toTarget.x, 0f, toTarget.z).magnitude;
             float speed = shooter.GetLaunchSpeed(power);
             float g = Mathf.Abs(Physics.gravity.y);
@@ -353,7 +428,7 @@ namespace Dapaolou.Player
             float yawError = Random.Range(-aimYawError, aimYawError);
             dir = Quaternion.AngleAxis(yawError, Vector3.up) * dir;
 
-            Debug.Log($"[AI] Player {playerId} fires {marble.name} power={power:F2}");
+            Debug.Log($"[AI] Player {playerId} flicks {marble.name} -> {(eating ? "吃威胁小兵@" + targetPos.ToString("F1") : "敌方炮楼")} power={power:F2}");
             shooter.FireMarble(marble, dir, power);
             if (thirdPersonModel != null) thirdPersonModel.SetCrouching(false);
 

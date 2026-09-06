@@ -3255,7 +3255,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   beamHeight: 40
-  beamDiameter: 0.5
+  beamDiameter: 0.22
   beamAlpha: 0.45
 --- !u!4 &304274131
 Transform:

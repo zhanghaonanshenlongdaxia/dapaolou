@@ -14,7 +14,7 @@ namespace Dapaolou.UI
     {
         [Header("光柱参数")]
         [SerializeField] private float beamHeight = 40f;      // 光柱高度（米）
-        [SerializeField] private float beamDiameter = 0.5f;   // 光柱直径（米）
+        [SerializeField] private float beamDiameter = 0.22f;  // 光柱直径（米），太粗会遮挡视线
         [SerializeField] private float beamAlpha = 0.45f;     // 透明度
 
         private Transform beamRoot;                            // 所有光柱的父节点
