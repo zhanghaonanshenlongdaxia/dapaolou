@@ -101,6 +101,8 @@ namespace Dapaolou.Marble
         
         void Update()
         {
+            // 设置面板打开时：屏蔽蓄力/射击/滚轮输入，鼠标让给 UI
+            if (Dapaolou.UI.SettingsPanel.IsOpen) return;
             switch (currentState)
             {
                 case ShootState.Idle:

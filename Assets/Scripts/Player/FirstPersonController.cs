@@ -102,6 +102,8 @@ namespace Dapaolou.Player
         
         void Update()
         {
+            // 设置面板打开时：屏蔽视角/移动，鼠标让给 UI
+            if (Dapaolou.UI.SettingsPanel.IsOpen) return;
             HandleMouseLook();
             HandleMovement();
             HandleCrouch();
