@@ -41,7 +41,7 @@
 
 - [2026-09-06 17:18:21] 【UI 点击失聪根因】场景从来没有 EventSystem（2026-09-06 补上，提交 5ca249f）——程序化创建 UI（代码 new GameObject 方式）不会像编辑器菜单建 UI 那样自动生成 EventSystem，导致全游戏所有 UI 按钮对真实鼠标点击无响应（onClick.AddListener 是好的，但没人分发点击事件）。**How to apply:** 以后新建任何可点击 UI 前，先确认场景有 EventSystem（FindObjectsOfType<EventSystem> 检查）；诊断 UI 点击问题第一步就查它，别往遮挡方向猜。另：诊断 UI 射线的实操代码——对每个 GraphicRaycaster 用 PointerEventData(position=按钮屏幕坐标).Raycast 列命中排序，直接看最顶层是谁。
 - [2026-09-07 00:37:30] 【BGM 设置界面整合·已完成】2026-09-07 提交：SettingsPagePopulatorV3（Assets/Editor/SettingsPagePopulator2.cs，菜单 Tools/Populate Settings Pages V3）补建 Page_键盘（按键表）/音乐/设定（重新开始+退出）三页 + Page_音乐/MusicController 挂件（TrackText/PrevButton/PauseButton/NextButton/VolumeSlider + SerializedObject 接线），旧 SettingsPanelBuilder.cs 已删除。Play 射线实测（EventSystem.RaycastAll+ExecuteEvents.pointerClickHandler）：6 个 Tab 全部真实点击切页、切歌（track playful→sunset→playful）/暂停往返/音量滑条→SetBgmVolume 联动全通、TrackText 与 CurrentBgmName 同步、开面板光标解锁+关闭恢复锁定；MP4 演示已录 screenshots/GameView_2026-09-07_*.mp4。**可靠路径教训：①复杂 UI 构建不用 exec_editor_script（Roslyn 会话累积致 CS0029/CS0103），改 write_file 独立 .cs 编辑器脚本 + start_compilation_pipeline + unity_menu 执行；②SetActive 同帧立即射线会 NO_HIT（布局未重建），脚本测试需 Task.Delay≥100ms settle；③17 首 BGM（folk/afternoon/evening + 10 首 OGG + countryside）轮播验证 playlist=17。**
-
+- [2026-09-07 00:50:27] [2026-09-07 00:45:00] 桥接握手镜像脚本已废弃：用户确认桥接已恢复正常，无需再后台运行 Tools/sync_bridge_handshake.ps1（2026-09-06 19:36:08 条目中"需保持后台运行"作废）。
 
 ### Reference
 - [2026-09-04 02:06:59] Dapaolou(打炮楼) 3D物理弹珠对战游戏 — 完整开发手册在项目根目录「打炮楼游戏开发手册.md」，含玩法规则、时间系统(6:00-20:00)、NPC行为时间表(妈妈/牛/狗臭豆/猫骚咪/弟弟)、手抖/力度/地形系统详解与Unity设置指南；修改游戏系统前先查手册。⚠️ 手册部分内容已过时：地形系统已升级 v3（TerrainType 5 种含 Puddle 水坑、水泥地分块+1.2cm 沟壕曲面填充、泥地 Perlin 网格嵌水坑盆、墙角三件套），以 TerrainEffectSystem.cs 与场景 YardTerrain 实际实现为准。

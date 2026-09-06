@@ -4,7 +4,7 @@ namespace Dapaolou.Player
 {
     /// <summary>
     /// 第三人称模型 - 其他玩家可见的角色模型
-    /// 使用简单几何体构建，无需骨骼动画
+    /// 支持两种模式：骨骼模型（riggedModelRoot，Animator 驱动 Idle/Walk）与简单几何体（程序化动画）
     /// </summary>
     public class ThirdPersonModel : MonoBehaviour
     {
@@ -40,8 +40,17 @@ namespace Dapaolou.Player
         [SerializeField] private Material headMaterial;
         [SerializeField] private Color playerColor = Color.blue;
         
+        [Header("骨骼模型模式")]
+        [Tooltip("导入的骨骼动画模型（如 Peasant Nolant）。设置后走 Animator 驱动，不再使用占位几何体")]
+        [SerializeField] private GameObject riggedModelRoot;
+        [SerializeField] private Animator modelAnimator;
+        [Tooltip("根对象移速超过该值（米/秒）视为移动中，自动切换 Idle/Walk")]
+        [SerializeField] private float moveSpeedThreshold = 0.25f;
+        
         // 内部状态
         private AnimatorState currentState = AnimatorState.Idle;
+        private AnimatorState appliedClipState = (AnimatorState)(-1);
+        private Vector3 lastRootPosition;
         private float walkCycle = 0f;
         private float currentCrouchAmount = 0f;
         private bool isFlicking = false;
@@ -58,11 +67,23 @@ namespace Dapaolou.Player
             Flicking
         }
         
+        /// <summary>是否使用导入的骨骼模型（Animator 驱动）</summary>
+        public bool IsRigged => riggedModelRoot != null;
+        
         void Awake()
         {
-            // 如果没有手动设置部件，自动创建
-            if (bodyRoot == null)
+            // 骨骼模型模式：驱动 Animator，不创建占位几何体
+            if (IsRigged)
             {
+                if (modelAnimator == null)
+                {
+                    modelAnimator = riggedModelRoot.GetComponentInChildren<Animator>();
+                }
+                lastRootPosition = GetRootPosition();
+            }
+            else if (bodyRoot == null)
+            {
+                // 如果没有手动设置部件，自动创建
                 CreateDefaultModel();
             }
             
@@ -72,6 +93,12 @@ namespace Dapaolou.Player
         
         void Update()
         {
+            if (IsRigged)
+            {
+                UpdateRiggedAnimation();
+                return;
+            }
+
             switch (currentState)
             {
                 case AnimatorState.Idle:
@@ -88,6 +115,64 @@ namespace Dapaolou.Player
                     break;
             }
         }
+        
+        #region 骨骼模型动画
+        
+        private Vector3 GetRootPosition()
+        {
+            Transform root = transform.root != null ? transform.root : transform.parent;
+            return root != null ? root.position : transform.position;
+        }
+        
+        private void UpdateRiggedAnimation()
+        {
+            if (currentState == AnimatorState.Flicking)
+            {
+                // 包内无弹珠动作剪辑：计时结束自动回 Idle（部件引用为空，过程动画自动跳过）
+                UpdateFlickAnimation();
+                return;
+            }
+            
+            // 根据根对象速度自动切换 Idle/Walk（速度阈值不受帧率影响）
+            Vector3 rootPos = GetRootPosition();
+            float dt = Time.deltaTime;
+            float speed = dt > 0f ? (rootPos - lastRootPosition).magnitude / dt : 0f;
+            lastRootPosition = rootPos;
+            bool moved = speed > moveSpeedThreshold;
+            
+            if (moved && currentState != AnimatorState.Walking)
+            {
+                SetState(AnimatorState.Walking);
+            }
+            else if (!moved && currentState == AnimatorState.Walking)
+            {
+                SetState(AnimatorState.Idle);
+            }
+            
+            ApplyRiggedClip();
+        }
+        
+        private void ApplyRiggedClip()
+        {
+            if (modelAnimator == null || currentState == appliedClipState) return;
+            
+            string clipState;
+            switch (currentState)
+            {
+                case AnimatorState.Walking:
+                    clipState = "metarig|Walk";
+                    break;
+                default:
+                    // Idle/Crouching/Flicking 包内无对应剪辑，统一用 Idle
+                    clipState = "metarig|Idle";
+                    break;
+            }
+            
+            modelAnimator.CrossFade(clipState, 0.15f, 0, 0);
+            appliedClipState = currentState;
+        }
+        
+        #endregion
         
         #region 模型创建
         
@@ -320,6 +405,13 @@ namespace Dapaolou.Player
         {
             if (currentState == newState) return;
             
+            // 骨骼模型模式：状态切换交给 ApplyRiggedClip，无需重置过程动画
+            if (IsRigged)
+            {
+                currentState = newState;
+                return;
+            }
+            
             // 重置上一个状态
             switch (currentState)
             {
@@ -343,6 +435,17 @@ namespace Dapaolou.Player
             isFlicking = true;
             flickTimer = 0f;
             
+            if (IsRigged)
+            {
+                // 无弹珠剪辑：立即切 Idle 播放，计时结束后由 UpdateFlickAnimation 回 Idle 状态
+                appliedClipState = currentState;
+                if (modelAnimator != null)
+                {
+                    modelAnimator.CrossFade("metarig|Idle", 0.1f, 0, 0);
+                }
+                return;
+            }
+            
             // 显示手中的弹珠
             if (marbleInHand != null)
             {
@@ -356,6 +459,10 @@ namespace Dapaolou.Player
         public void SetPlayerColor(Color color)
         {
             playerColor = color;
+
+            // 骨骼模型使用预制体自带配色（Blue/Brown/Green/Yellow），不做运行时重染色
+            if (IsRigged) return;
+
             ApplyMaterial(bodyRoot, bodyMaterial, playerColor);
             ApplyMaterial(head, headMaterial, playerColor * 1.1f);
         }
