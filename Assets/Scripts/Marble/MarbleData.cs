@@ -33,6 +33,66 @@ namespace Dapaolou.Marble
         public int towerIndex = -1;             // 炮楼中的位置索引（-1表示小兵）
         public int lastAttackerId = -1;         // 攻击链归属：被撞飞后代表哪个玩家（-1=无）
         public bool pendingCleanup = false;    // 待清理标记（炮楼散架后滚动停止即销毁）
+        public bool isAmbush = false;           // 暗兵：埋土隐藏，激活后才对敌方可见/可用
+
+        /// <summary>
+        /// 埋成暗兵：冻结物理+关碰撞+半透明，头顶加土包标记（仅己方可见性由 Beacon/瞄准系统处理）
+        /// </summary>
+        public void BuryAsAmbush()
+        {
+            isAmbush = true;
+            var rb = GetComponent<Rigidbody>();
+            if (rb != null) { rb.isKinematic = true; }
+            foreach (var col in GetComponentsInChildren<Collider>()) col.enabled = false;
+            var r = GetComponent<Renderer>();
+            if (r != null)
+            {
+                var m = new Material(r.sharedMaterial);
+                m.SetFloat("_Surface", 1f);   // URP Lit: Transparent
+                m.SetColor("_BaseColor", new Color(0.55f, 0.42f, 0.25f, 0.55f));   // 土色半透明
+                m.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                m.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                m.SetInt("_ZWrite", 0);
+                m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                m.renderQueue = 3000;
+                r.sharedMaterial = m;
+            }
+            // 土包标记（暗兵自己的视觉提示，不参与物理）
+            GameObject mound = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            mound.name = "AmbushMound";
+            var mcol = mound.GetComponent<Collider>();
+            if (mcol != null) Destroy(mcol);
+            mound.transform.SetParent(transform, false);
+            mound.transform.localPosition = new Vector3(0f, 0.05f, 0f);
+            mound.transform.localScale = new Vector3(0.14f, 0.07f, 0.14f);
+            var mr = mound.GetComponent<MeshRenderer>();
+            var mm = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+            mm.SetColor("_BaseColor", new Color(0.45f, 0.33f, 0.2f, 1f));   // 干土色
+            mr.sharedMaterial = mm;
+        }
+
+        /// <summary>
+        /// 激活暗兵（出土）：恢复物理与碰撞，土包消失。此时敌方才看得见它
+        /// </summary>
+        public void ActivateAmbush()
+        {
+            if (!isAmbush) return;
+            isAmbush = false;
+            var rb = GetComponent<Rigidbody>();
+            if (rb != null) { rb.isKinematic = false; rb.WakeUp(); }
+            foreach (var col in GetComponentsInChildren<Collider>()) col.enabled = true;
+            var mound = transform.Find("AmbushMound");
+            if (mound != null) Destroy(mound.gameObject);
+            // 颜色还原为阵营玻璃材质
+            var r = GetComponent<Renderer>();
+            if (r != null)
+            {
+                var gm = Game.GameManager.Instance;
+                var pc = gm != null ? gm.GetPlayer(ownerPlayerId)?.playerColor ?? Color.white : Color.white;
+                r.sharedMaterial = CreateGlassMaterial(pc);
+            }
+            state = MarbleState.Idle;
+        }
 
         /// <summary>发射序号：每次发射盖唯一递增戳（0=未被发射过）。
         /// 攻守判定用——回合/state/速度在双回调+地形刹停下都会出现两回调结论相左</summary>
@@ -175,7 +235,8 @@ namespace Dapaolou.Marble
 
             // 蠕动清零：被撞开的弹珠物理上在动但 state 仍是 Idle，不经过下面的 Rolling
             // 刹停分支——接地且速度/角速度低到不可见就彻底清零，能量归零不再蠕动
-            if (!removing && state != MarbleState.Destroyed && rb != null
+            // （暗兵 kinematic：rb.velocity 不可写，直接跳过避免刷警告）
+            if (!removing && state != MarbleState.Destroyed && rb != null && !rb.isKinematic && !isAmbush
                 && rb.velocity.magnitude < 0.05f && rb.angularVelocity.magnitude < 0.05f
                 && Physics.Raycast(transform.position, Vector3.down, 0.06f))
             {
@@ -189,7 +250,8 @@ namespace Dapaolou.Marble
             }
 
             // 滚动中的弹珠：低速直接刹停，避免长时间蠕动导致回合等待过久
-            if (state == MarbleState.Rolling && rb != null)
+            // （暗兵 kinematic：不进入 Rolling 分支，物理写入全部跳过）
+            if (state == MarbleState.Rolling && rb != null && !rb.isKinematic && !isAmbush)
             {
                 if (rb.velocity.magnitude < 0.3f)
                 {

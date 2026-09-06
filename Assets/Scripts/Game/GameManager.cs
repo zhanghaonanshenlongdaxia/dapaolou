@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using System.Linq;
 using Dapaolou.Marble;
 
 namespace Dapaolou.Game
@@ -10,6 +11,7 @@ namespace Dapaolou.Game
     public enum GamePhase
     {
         Setup,          // 设置阶段
+        Placement,      // 布防阶段：玩家自选位置放炮楼/小兵/暗兵
         Playing,        // 游戏进行中
         GameOver        // 游戏结束
     }
@@ -21,6 +23,7 @@ namespace Dapaolou.Game
     {
         [Header("游戏配置")]
         [SerializeField] private GameConfig gameConfig;
+        public GameConfig Config => gameConfig;   // 布防控制器等外部系统读取规则参数
         
         [Header("玩家配置")]
         [SerializeField] private int playerCount = 2;
@@ -65,6 +68,19 @@ namespace Dapaolou.Game
         public System.Action<int> OnPlayerTurnEnd;
         public System.Action<int> OnGameOver;
         public System.Action<MarbleData, MarbleData> OnMarbleDestroyed; // 被摧毁的弹珠, 被命中的弹珠
+        public System.Action<int> OnPlacementStart;   // 布防阶段开始（参数=先放的玩家ID）
+
+        /// <summary>布防阶段放置的弹珠统一注册（供碰撞/清理系统追踪）</summary>
+        public void RegisterPlacementMarble(MarbleData marble)
+        {
+            if (marble != null) allMarbles.Add(marble);
+        }
+
+        /// <summary>布防阶段创建小兵（与 SpawnSoldiersForPlayer 同规格）</summary>
+        public GameObject CreatePlacementSoldier(Vector3 position, int playerId, int index)
+        {
+            return CreateSoldierMarble(position, playerId, index);
+        }
         
         void Awake()
         {
@@ -89,6 +105,9 @@ namespace Dapaolou.Game
             {
                 case GamePhase.Setup:
                     UpdateSetup();
+                    break;
+                case GamePhase.Placement:
+                    // 布防阶段由事件驱动（PlacementController/NotifyPlayerPlacementDone），无需逐帧逻辑
                     break;
                 case GamePhase.Playing:
                     UpdatePlaying();
@@ -136,12 +155,115 @@ namespace Dapaolou.Game
                 marbleShooter.OnMarbleShot += OnMarbleShot;
                 marbleShooter.OnStateChanged += OnShootStateChanged;
             }
-            
-            // 生成炮楼和小兵
-            SpawnAllTowers();
-            SpawnAllSoldiers();
-            
-            currentPhase = GamePhase.Setup;
+
+            // 布防模式：不预摆炮楼/小兵，进入 Placement 阶段由玩家自选位置
+            currentPhase = GamePhase.Placement;
+            OnPlacementStart?.Invoke(0);   // 人类先放
+        }
+
+        /// <summary>
+        /// 某玩家布防完成。人类放完→AI 自动布防→正式开局
+        /// </summary>
+        public void NotifyPlayerPlacementDone(int playerId)
+        {
+            if (currentPhase != GamePhase.Placement) return;
+            if (playerId != 0) { StartGame(); return; }
+
+            // AI 自动布防
+            var humanTower = players[0].towerCenter;
+            var ai = players[1];
+            Vector3 aiTowerPos = AutoPlaceTowerForAI(humanTower);
+            var towerMarbles = towerBuilder.BuildTower(aiTowerPos, 1, playerColors[1]);
+            ai.towerMarbles = towerMarbles;
+            ai.towerCenter = aiTowerPos;
+            allMarbles.AddRange(towerMarbles);
+            AutoPlaceSoldiersForAI(ai, aiTowerPos, humanTower, gameConfig.soldierCountPerPlayer, false);
+            if (gameConfig.ambushModeEnabled)
+            {
+                AutoPlaceSoldiersForAI(ai, aiTowerPos, humanTower, gameConfig.ambushCountPerPlayer, true);
+            }
+            Debug.Log($"[Placement] AI deployed at {aiTowerPos}");
+            StartGame();
+        }
+
+        /// <summary>
+        /// AI 炮楼：在合法区内采样，选距人类炮楼及人类所有暗兵都最远的候选
+        /// </summary>
+        private Vector3 AutoPlaceTowerForAI(Vector3 humanTower)
+        {
+            var humanAmbush = players[0].ambushMarbles
+                .Where(m => m != null && m.state != MarbleState.Destroyed).ToList();
+            Vector3 best = Vector3.zero;
+            float bestDist = -1f;
+            for (int i = 0; i < 40; i++)
+            {
+                Vector3 candidate = new Vector3(Random.Range(-gameConfig.placementBounds.x, gameConfig.placementBounds.x),
+                                                 0f,
+                                                 Random.Range(-gameConfig.placementBounds.y, gameConfig.placementBounds.y));
+                if (Vector3.Distance(candidate, humanTower) < gameConfig.minTowerDistance) continue;
+                // 人类暗兵也算"地盘"：炮楼不能贴近暗兵
+                bool tooCloseToAmbush = false;
+                foreach (var a in humanAmbush)
+                {
+                    if (Vector3.Distance(candidate, a.transform.position) < gameConfig.minTowerDistance)
+                    {
+                        tooCloseToAmbush = true; break;
+                    }
+                }
+                if (tooCloseToAmbush) continue;
+                float d = Vector3.Distance(candidate, humanTower);
+                if (d > bestDist) { bestDist = d; best = candidate; }
+            }
+            if (bestDist < 0f) best = new Vector3(0f, 0f, gameConfig.placementBounds.y);   // 兜底
+            return best;
+        }
+
+        /// <summary>
+        /// AI 批量放兵：明兵贴塔 1.5~3m，暗兵可远（≤ambushMaxRadius）且距人类炮楼 ≥minTowerDistance
+        /// </summary>
+        private void AutoPlaceSoldiersForAI(PlayerData ai, Vector3 aiTower, Vector3 humanTower, int count, bool ambush)
+        {
+            float maxR = ambush ? gameConfig.ambushMaxRadius : gameConfig.soldierMaxRadius;
+            var humanAmbush = players[0].ambushMarbles
+                .Where(m => m != null && m.state != MarbleState.Destroyed).ToList();
+            for (int i = 0; i < count; i++)
+            {
+                Vector3 pos = Vector3.zero;
+                bool found = false;
+                for (int attempt = 0; attempt < 40; attempt++)
+                {
+                    Vector2 rnd = Random.insideUnitCircle.normalized * Random.Range(1.5f, maxR);
+                    Vector3 candidate = aiTower + new Vector3(rnd.x, 0f, rnd.y);
+                    if (Vector3.Distance(candidate, humanTower) < gameConfig.minTowerDistance) continue;
+                    // 避开人类暗兵位置（AI 不主动踩对方暗兵，暗兵是隐藏优势）
+                    bool onAmbush = false;
+                    foreach (var a in humanAmbush)
+                    {
+                        if (Vector3.Distance(candidate, a.transform.position) < 0.5f)
+                        {
+                            onAmbush = true; break;
+                        }
+                    }
+                    if (onAmbush) continue;
+                    pos = candidate;
+                    found = true;
+                    break;
+                }
+                if (!found) pos = aiTower + new Vector3(1.5f + i * 0.18f, 0f, 1.2f);
+
+                GameObject soldierObj = CreateSoldierMarble(pos, 1, i + (ambush ? 100 : 0));
+                MarbleData data = soldierObj.GetComponent<MarbleData>();
+                if (ambush)
+                {
+                    data.BuryAsAmbush();
+                    ai.ambushMarbles.Add(data);
+                }
+                else
+                {
+                    ai.soldierMarbles.Add(data);
+                }
+                allMarbles.Add(data);
+            }
         }
         
         /// <summary>

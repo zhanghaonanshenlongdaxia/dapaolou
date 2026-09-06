@@ -38,7 +38,9 @@ namespace Dapaolou.Game
         
         [Header("小兵")]
         public List<MarbleData> soldierMarbles = new List<MarbleData>();
+        public List<MarbleData> ambushMarbles = new List<MarbleData>();   // 暗兵：埋土隐藏，激活后转入 soldierMarbles
         public int maxSoldiers = 3;
+        public int maxAmbushSoldiers = 3;
         
         [Header("回合统计")]
         public int shotsThisTurn = 0;
@@ -186,7 +188,7 @@ namespace Dapaolou.Game
         {
             List<MarbleData> available = new List<MarbleData>();
             
-            // 优先返回小兵（排除待清理的散架弹珠）
+            // 优先返回小兵（排除待清理的散架弹珠；暗兵未激活不在列表里）
             foreach (var soldier in soldierMarbles)
             {
                 if (soldier != null && soldier.state == MarbleState.Idle && !soldier.pendingCleanup)

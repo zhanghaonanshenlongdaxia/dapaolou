@@ -373,9 +373,17 @@ namespace Dapaolou.Game
             {
                 // 设置游戏顺序
                 gameManager.SetPlayOrder(playOrder);
-                
-                // 开始游戏
-                gameManager.StartGame();
+
+                // 布防模式下先走布防阶段（人类放炮楼/小兵/暗兵），布防完成由 GameManager 自动开局
+                if (gameManager.GetCurrentPhase() == GamePhase.Placement)
+                {
+                    Debug.Log("GameStartManager: 布防模式，等待玩家完成布防…");
+                }
+                else
+                {
+                    // 开始游戏
+                    gameManager.StartGame();
+                }
             }
             
             // 通知游戏准备就绪

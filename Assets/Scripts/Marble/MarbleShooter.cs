@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using Dapaolou.Game;
 using Dapaolou.Player;
+using System.Linq;
 
 namespace Dapaolou.Marble
 {
@@ -101,6 +102,10 @@ namespace Dapaolou.Marble
         
         void Update()
         {
+            // 布防阶段：发射器完全休眠（瞄准/选弹/蓄力全部关闭，鼠标只用于视角走位选位）
+            if (Dapaolou.Game.GameManager.Instance != null
+                && Dapaolou.Game.GameManager.Instance.GetCurrentPhase() == Dapaolou.Game.GamePhase.Placement) return;
+
             // 设置面板打开时：屏蔽蓄力/射击/滚轮输入，鼠标让给 UI
             if (Dapaolou.UI.SettingsPanel.IsOpen) return;
             switch (currentState)
@@ -215,6 +220,12 @@ namespace Dapaolou.Marble
                 CycleMarble(scroll > 0f ? 1 : -1);
             }
 
+            // G 键循环选择己方暗兵（拿暗兵出来打）
+            if (Input.GetKeyDown(KeyCode.G))
+            {
+                CycleAmbushMarble(1);
+            }
+
             // 按下鼠标左键开始蓄力
             if (Input.GetMouseButtonDown(0))
             {
@@ -249,6 +260,30 @@ namespace Dapaolou.Marble
             SetHighlight(currentMarble, true);
             highlightedMarble = currentMarble;
             Debug.Log($"[MarbleShooter] 滚轮切换弹珠 -> {currentMarble.name}");
+        }
+
+        /// <summary>
+        /// G 键选择己方暗兵（瞄准状态下按 G 循环切换）：
+        /// 选中暗兵作为 currentMarble，发射瞬间出土激活（敌方此时才看见）
+        /// </summary>
+        private void CycleAmbushMarble(int dir)
+        {
+            var gm = GameManager.Instance;
+            if (gm == null) return;
+            var ambush = gm.GetCurrentPlayer().ambushMarbles
+                .Where(m => m != null && m.state == MarbleState.Idle).ToList();
+            if (ambush.Count == 0) return;
+
+            int idx = ambush.IndexOf(currentMarble);
+            idx = (idx + dir + ambush.Count) % ambush.Count;
+            currentMarble = ambush[idx];
+            manualSelectTime = Time.time;
+
+            aimedMarble = currentMarble;
+            SetHighlight(highlightedMarble, false);
+            SetHighlight(currentMarble, true);
+            highlightedMarble = currentMarble;
+            Debug.Log($"[MarbleShooter] 选择暗兵 -> {currentMarble.name}");
         }
 
         /// <summary>
@@ -690,6 +725,9 @@ namespace Dapaolou.Marble
                 Debug.LogWarning("FireMarble: marble unavailable!");
                 return;
             }
+
+            // 暗兵发射瞬间出土激活：此时敌方才看得见它
+            if (marble.isAmbush) marble.ActivateAmbush();
 
             // 清理高亮/辅助线，避免残留到对手回合的特写镜头里
             HideAimVisuals();

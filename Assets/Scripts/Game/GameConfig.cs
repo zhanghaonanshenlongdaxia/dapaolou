@@ -18,6 +18,17 @@ namespace Dapaolou.Game
         public int soldierCountPerPlayer = 3;   // 每个玩家的小兵数
         public float soldierSpawnRadius = 0.5f; // 小兵生成半径
         public float soldierSpawnAngle = 45f;   // 小兵生成角度范围
+
+        [Header("布防配置（开局自选位置）")]
+        public Vector2 placementBounds = new Vector2(10f, 8f);  // 布防合法区（半宽半深，以场地中心为原点）
+        public float minTowerDistance = 6f;     // 两家炮楼最小间距
+        public float soldierMaxRadius = 3f;     // 明兵距己方炮楼最远距离
+
+        [Header("暗兵配置")]
+        public bool ambushModeEnabled = false;  // 暗兵模式开关（联机开局可选）
+        public int ambushCountPerPlayer = 3;    // 每个玩家的暗兵数（基础 3，联机房主可调上限）
+        public float ambushMaxRadius = 5f;      // 暗兵距己方炮楼最远距离
+        public float ambushMinEnemyTowerDist = 6f; // 暗兵距敌方炮楼最小距离（不能埋到对手地盘）
         
         [Header("二次打爆配置")]
         public int secondHitThreshold = 3;      // 二次打爆阈值（剩余多少需要二次打爆）
