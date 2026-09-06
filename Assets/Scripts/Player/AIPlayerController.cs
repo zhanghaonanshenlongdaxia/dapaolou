@@ -19,12 +19,14 @@ namespace Dapaolou.Player
 
         private PlayerManager playerManager;
         private FirstPersonController fpsController;
+        private ThirdPersonModel thirdPersonModel;
         private bool turnActive = false;
 
         void Awake()
         {
             playerManager = GetComponent<PlayerManager>();
             fpsController = GetComponent<FirstPersonController>();
+            thirdPersonModel = GetComponentInChildren<ThirdPersonModel>();
         }
 
         void Start()
@@ -288,12 +290,13 @@ namespace Dapaolou.Player
             var enemy = gm.GetPlayer((playerId + 1) % 2);
             if (enemy == null) yield break;
 
-            // 走到要弹的弹珠正后方蹲点瞄准（弹哪个就停在哪个后面，不乱停）
+            // 走到要弹的弹珠正后方（射线上，距弹珠 0.9m，在 1.5m 射程内）；
+            // 超时放宽到 10s——弹珠远时 3s 走不完会半路开火（远程弹珠 bug）
             Vector3 aimFlat = enemy.towerCenter - marble.transform.position;
             aimFlat.y = 0f;
             Vector3 behindSpot = marble.transform.position - aimFlat.normalized * 0.9f;
             float wt = 0f;
-            while ((transform.position - behindSpot).magnitude > 0.12f && wt < 3f && turnActive)
+            while ((transform.position - behindSpot).magnitude > 0.12f && wt < 10f && turnActive)
             {
                 Vector3 flatDelta = behindSpot - transform.position;
                 flatDelta.y = 0f;
@@ -316,8 +319,14 @@ namespace Dapaolou.Player
                 faceT += Time.deltaTime;
                 yield return null;
             }
-            yield return new WaitForSeconds(0.6f);
-            if (!turnActive) yield break;
+            // 半蹲蓄力后再弹
+            if (thirdPersonModel != null) thirdPersonModel.SetCrouching(true);
+            yield return new WaitForSeconds(0.7f);
+            if (!turnActive)
+            {
+                if (thirdPersonModel != null) thirdPersonModel.SetCrouching(false);
+                yield break;
+            }
 
             // 随机力度
             float power = Random.Range(powerRange.x, powerRange.y);
@@ -346,6 +355,7 @@ namespace Dapaolou.Player
 
             Debug.Log($"[AI] Player {playerId} fires {marble.name} power={power:F2}");
             shooter.FireMarble(marble, dir, power);
+            if (thirdPersonModel != null) thirdPersonModel.SetCrouching(false);
 
             // 弹珠特写：让人类玩家的镜头跟随这颗弹珠 3 秒，之后自动恢复第一人称
             foreach (var pm in FindObjectsOfType<PlayerManager>())

@@ -69,6 +69,23 @@ namespace Dapaolou.Player
         // 阵营标识
         private Transform factionMarker;
         private Material markerMaterial;
+
+        // 脚步贴地校准
+        private bool footCalibrated = false;
+
+        // 反应姿态（程序化骨骼叠加，LateUpdate 在 Animator 之后可安全覆盖）
+        public enum ReactionType { None, Sad, Cheer }
+        private ReactionType reactionType = ReactionType.None;
+        private float reactionTimer = 0f;
+        private float reactionDuration = 0f;
+        private float reactionBlend = 0f;
+        private bool crouching = false;
+        private float crouchBlend = 0f;
+
+        // 骨骼缓存
+        private Transform hipsBone, spineBone, headBone;
+        private Transform upperArmL, upperArmR, forearmL, forearmR;
+        private Transform thighL, thighR, shinL, shinR;
         
         public enum AnimatorState
         {
@@ -115,6 +132,7 @@ namespace Dapaolou.Player
 
             if (IsRigged)
             {
+                if (!footCalibrated && Time.timeSinceLevelLoad > 0.05f) CalibrateFeetToGround();
                 UpdateRiggedAnimation();
                 return;
             }
@@ -193,7 +211,170 @@ namespace Dapaolou.Player
             modelAnimator.CrossFadeInFixedTime(clipState, 0.12f, 0, 0f);
             appliedClipState = currentState;
         }
-        
+
+        /// <summary>
+        /// 脚步贴地校准：CharacterController 皮肤宽度会让根对象悬在地面之上，
+        /// 用射线取脚下真实地面点，把模型下移让脚骨贴地（仅执行一次）
+        /// </summary>
+        private void CalibrateFeetToGround()
+        {
+            footCalibrated = true;
+            if (modelAnimator == null) return;
+
+            var footL = modelAnimator.GetBoneTransform(HumanBodyBones.LeftFoot);
+            var footR = modelAnimator.GetBoneTransform(HumanBodyBones.RightFoot);
+            if (footL == null || footR == null || riggedModelRoot == null) return;
+
+            float footY = Mathf.Min(footL.position.y, footR.position.y);
+            Vector3 origin = new Vector3(transform.position.x, footY + 0.5f, transform.position.z);
+            float groundY = float.NaN;
+            foreach (var hit in Physics.RaycastAll(origin, Vector3.down, 2.5f))
+            {
+                // 忽略自身胶囊体，取最高的命中点作为脚下地面
+                if (hit.collider.transform.root == transform.root) continue;
+                if (float.IsNaN(groundY) || hit.point.y > groundY) groundY = hit.point.y;
+            }
+            if (float.IsNaN(groundY)) return;
+
+            float delta = footY - groundY;
+            if (Mathf.Abs(delta) > 0.005f)
+            {
+                var lp = riggedModelRoot.transform.localPosition;
+                riggedModelRoot.transform.localPosition = new Vector3(lp.x, lp.y - delta, lp.z);
+            }
+        }
+
+        #endregion
+
+        #region 反应姿态叠加（沮丧/欢呼/半蹲）
+
+        /// <summary>沮丧：己方炮楼/小兵被打掉时低头垂肩</summary>
+        public void PlaySad(float duration = 2.5f)
+        {
+            reactionType = ReactionType.Sad;
+            reactionTimer = 0f;
+            reactionDuration = duration;
+        }
+
+        /// <summary>欢呼：打掉敌方时举臂蹦跳</summary>
+        public void PlayCheer(float duration = 2f)
+        {
+            reactionType = ReactionType.Cheer;
+            reactionTimer = 0f;
+            reactionDuration = duration;
+        }
+
+        /// <summary>半蹲蓄力（弹弹珠前）</summary>
+        public void SetCrouching(bool on)
+        {
+            crouching = on;
+        }
+
+        private void CacheBones()
+        {
+            if (hipsBone != null || modelAnimator == null) return;
+            hipsBone = modelAnimator.GetBoneTransform(HumanBodyBones.Hips);
+            spineBone = modelAnimator.GetBoneTransform(HumanBodyBones.Spine);
+            headBone = modelAnimator.GetBoneTransform(HumanBodyBones.Head);
+            upperArmL = modelAnimator.GetBoneTransform(HumanBodyBones.LeftUpperArm);
+            upperArmR = modelAnimator.GetBoneTransform(HumanBodyBones.RightUpperArm);
+            forearmL = modelAnimator.GetBoneTransform(HumanBodyBones.LeftLowerArm);
+            forearmR = modelAnimator.GetBoneTransform(HumanBodyBones.RightLowerArm);
+            thighL = modelAnimator.GetBoneTransform(HumanBodyBones.LeftUpperLeg);
+            thighR = modelAnimator.GetBoneTransform(HumanBodyBones.RightUpperLeg);
+            shinL = modelAnimator.GetBoneTransform(HumanBodyBones.LeftLowerLeg);
+            shinR = modelAnimator.GetBoneTransform(HumanBodyBones.RightLowerLeg);
+        }
+
+        /// <summary>把骨骼当前的肢体朝向往目标方向掰 blend 比例（世界空间，不依赖绑定轴）</summary>
+        private void BendLimb(Transform from, Transform to, Vector3 targetDir, float blend)
+        {
+            if (from == null || to == null || blend <= 0f) return;
+            Vector3 cur = to.position - from.position;
+            if (cur.sqrMagnitude < 0.000001f) return;
+            Vector3 want = Vector3.Slerp(cur.normalized, targetDir.normalized, blend);
+            Quaternion delta = Quaternion.FromToRotation(cur.normalized, want);
+            from.rotation = delta * from.rotation;
+        }
+
+        /// <summary>以角色朝向为基准轴的骨骼旋转（pitch=绕角色右轴点头，yaw=绕上轴，roll=绕前轴），世界轴会随人物朝向歪掉</summary>
+        private void RotateBone(Transform bone, float pitchDeg, float yawDeg, float rollDeg, float blend)
+        {
+            if (bone == null || blend <= 0f) return;
+            Transform rootT = transform.root != null ? transform.root : transform;
+            Quaternion delta = Quaternion.AngleAxis(pitchDeg * blend, rootT.right)
+                             * Quaternion.AngleAxis(yawDeg * blend, rootT.up)
+                             * Quaternion.AngleAxis(rollDeg * blend, rootT.forward);
+            bone.rotation = delta * bone.rotation;
+        }
+
+        void LateUpdate()
+        {
+            if (!IsRigged || modelAnimator == null) return;
+            CacheBones();
+
+            // 半蹲混合
+            crouchBlend = Mathf.MoveTowards(crouchBlend, crouching ? 1f : 0f, Time.deltaTime * 5f);
+
+            // 反应计时与淡入淡出
+            if (reactionType != ReactionType.None)
+            {
+                reactionTimer += Time.deltaTime;
+                float fadeIn = Mathf.Clamp01(reactionTimer / 0.2f);
+                float fadeOut = Mathf.Clamp01((reactionDuration - reactionTimer) / 0.35f);
+                reactionBlend = Mathf.Min(fadeIn, fadeOut);
+                if (reactionTimer >= reactionDuration)
+                {
+                    reactionType = ReactionType.None;
+                    reactionBlend = 0f;
+                }
+            }
+            else reactionBlend = Mathf.MoveTowards(reactionBlend, 0f, Time.deltaTime * 4f);
+
+            if (crouchBlend <= 0f && reactionBlend <= 0f) return;
+
+            // ==== 半蹲蓄力 ====
+            if (crouchBlend > 0f)
+            {
+                float b = crouchBlend;
+                Vector3 fwd = transform.root != null ? transform.root.forward : Vector3.forward;
+                if (hipsBone != null) hipsBone.position += Vector3.down * (0.13f * b);
+                // 大腿前抬+小腿后收，保持脚掌大致贴地
+                BendLimb(thighL, shinL, fwd * 0.7f + Vector3.down * 0.7f, b);
+                BendLimb(thighR, shinR, fwd * 0.7f + Vector3.down * 0.7f, b);
+                BendLimb(shinL, modelAnimator.GetBoneTransform(HumanBodyBones.LeftFoot), -fwd * 0.5f + Vector3.down * 0.85f, b);
+                BendLimb(shinR, modelAnimator.GetBoneTransform(HumanBodyBones.RightFoot), -fwd * 0.5f + Vector3.down * 0.85f, b);
+                RotateBone(spineBone, 14f, 0f, 0f, b);
+                RotateBone(headBone, -8f, 0f, 0f, b);
+            }
+
+            // ==== 沮丧 ====
+            if (reactionType == ReactionType.Sad && reactionBlend > 0f)
+            {
+                float b = reactionBlend;
+                float sway = Mathf.Sin(reactionTimer * 1.5f) * 6f;
+                RotateBone(headBone, 30f, sway, 0f, b);
+                RotateBone(spineBone, 12f, 0f, 0f, b);
+                // 手臂无力前垂
+                BendLimb(upperArmL, forearmL, Vector3.down + transform.root.forward * 0.35f, b * 0.5f);
+                BendLimb(upperArmR, forearmR, Vector3.down + transform.root.forward * 0.35f, b * 0.5f);
+            }
+
+            // ==== 欢呼 ====
+            if (reactionType == ReactionType.Cheer && reactionBlend > 0f)
+            {
+                float b = reactionBlend;
+                float hop = Mathf.Abs(Mathf.Sin(reactionTimer * 8f)) * 0.12f;
+                if (hipsBone != null) hipsBone.position += Vector3.up * (hop * b);
+                Transform rootT = transform.root != null ? transform.root : transform;
+                // 举臂过头（沿角色左右略外张）
+                BendLimb(upperArmL, forearmL, Vector3.up - rootT.right * 0.25f, b);
+                BendLimb(upperArmR, forearmR, Vector3.up + rootT.right * 0.25f, b);
+                RotateBone(headBone, -18f, 0f, 0f, b);
+                RotateBone(spineBone, -6f, 0f, 0f, b);
+            }
+        }
+
         #endregion
         
         #region 阵营标识

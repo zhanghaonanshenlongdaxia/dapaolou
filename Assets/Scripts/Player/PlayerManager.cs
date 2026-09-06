@@ -75,6 +75,7 @@ namespace Dapaolou.Player
             {
                 GameManager.Instance.OnPlayerTurnStart += OnTurnStart;
                 GameManager.Instance.OnPlayerTurnEnd += OnTurnEnd;
+                GameManager.Instance.OnMarbleDestroyed += OnMarbleDestroyedReaction;
             }
             
             // 订阅射击事件
@@ -348,6 +349,24 @@ namespace Dapaolou.Player
         
         #region 回调
         
+        /// <summary>
+        /// 弹珠被摧毁时的情绪反应：己方炮楼/小兵被打掉 → 沮丧；打掉敌方 → 欢呼
+        /// </summary>
+        private void OnMarbleDestroyedReaction(MarbleData attacker, MarbleData victim)
+        {
+            if (attacker == null || victim == null || thirdPersonModel == null) return;
+            int attackerId = attacker.GetEffectiveAttackerId();
+
+            if (victim.ownerPlayerId == playerId && attackerId != playerId)
+            {
+                thirdPersonModel.PlaySad();
+            }
+            else if (victim.ownerPlayerId != playerId && attackerId == playerId)
+            {
+                thirdPersonModel.PlayCheer();
+            }
+        }
+        
         private void OnTurnStart(int playerIndex)
         {
             if (playerIndex == playerId)
@@ -492,6 +511,7 @@ namespace Dapaolou.Player
             {
                 GameManager.Instance.OnPlayerTurnStart -= OnTurnStart;
                 GameManager.Instance.OnPlayerTurnEnd -= OnTurnEnd;
+                GameManager.Instance.OnMarbleDestroyed -= OnMarbleDestroyedReaction;
             }
             
             if (marbleShooter != null)
