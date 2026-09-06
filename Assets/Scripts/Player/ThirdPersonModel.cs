@@ -46,6 +46,8 @@ namespace Dapaolou.Player
         [SerializeField] private Animator modelAnimator;
         [Tooltip("根对象移速超过该值（米/秒）视为移动中，自动切换 Idle/Walk")]
         [SerializeField] private float moveSpeedThreshold = 0.25f;
+        [Tooltip("Walk 剪辑的固有步速（米/秒）——动画播放速度会按 实际移速/该值 缩放，消除滑步")]
+        [SerializeField] private float walkClipPace = 0.75f;
         
         [Header("阵营标识")]
         [Tooltip("头顶常驻上下弹跳的小球，颜色区分阵营（替代身体染色）")]
@@ -83,6 +85,7 @@ namespace Dapaolou.Player
         private float crouchBlend = 0f;
         private float idleTimer = 0f;
         private float nextIdleGesture = 9f;
+        private float smoothedSpeed = 0f;
 
         // 骨骼缓存
         private Transform hipsBone, spineBone, headBone;
@@ -202,6 +205,15 @@ namespace Dapaolou.Player
                 }
             }
             else idleTimer = 0f;
+
+            // 动画节奏匹配实际移速：animator.speed = 移速/剪辑固有步速（跑步时快放，消除滑步）
+            if (modelAnimator != null)
+            {
+                smoothedSpeed = Mathf.Lerp(smoothedSpeed, moved ? speed : 0f, Time.deltaTime * 8f);
+                modelAnimator.speed = currentState == AnimatorState.Walking
+                    ? Mathf.Clamp(smoothedSpeed / Mathf.Max(walkClipPace, 0.01f), 0.6f, 2.8f)
+                    : 1f;
+            }
 
             ApplyRiggedClip();
         }

@@ -284,6 +284,10 @@ namespace Dapaolou.UI
                 PlayerData winner = gameManager.GetPlayer(winnerIndex);
                 winnerText.text = $"玩家 {winnerIndex + 1} 获胜！\n得分: {winner?.score ?? 0}";
             }
+
+            // 解锁鼠标：胜利面板要点"再来一局"按钮
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
         }
         
         #endregion

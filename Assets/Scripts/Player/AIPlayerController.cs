@@ -16,6 +16,11 @@ namespace Dapaolou.Player
         [SerializeField] private Vector2 thinkDelayRange = new Vector2(3f, 8f); // 思考/找角度时间范围（秒）
         [SerializeField] private float aimYawError = 1.5f;      // 瞄准横向误差（度）
         [SerializeField] private Vector2 powerRange = new Vector2(0.75f, 1.0f); // 随机力度范围（0-1）
+        [Header("移动")]
+        [Tooltip("要弹的弹珠离 AI 超过该距离（米）就不思考，直接跑过去")]
+        [SerializeField] private float farMarbleDistance = 3.0f;
+        [Tooltip("远距离直奔时的跑步速度（米/秒）")]
+        [SerializeField] private float runSpeed = 2.6f;
 
         private PlayerManager playerManager;
         private FirstPersonController fpsController;
@@ -263,7 +268,8 @@ namespace Dapaolou.Player
         }
 
         /// <summary>
-        /// AI 回合流程：来回踱步观察（3~5轮：随机安全方向走一段→停下转身盯炮楼/小兵~1s）→ 选弹珠 → 走到弹珠后方 → 确定方向力度 → 发射 → 弹珠特写
+        /// AI 回合流程：决策先行——弹珠远（>3m）不思考直接跑过去；近则踱步观察（3~5轮）→
+        /// 走到发射站位（正后方→斜后→侧边候选点）→ 转身半跪 → 发射 → 弹珠特写
         /// </summary>
         private IEnumerator TakeTurn()
         {
@@ -273,81 +279,12 @@ namespace Dapaolou.Player
             var gm = GameManager.Instance;
             if (gm == null || gm.GetCurrentPhase() != GamePhase.Playing) yield break;
 
-            // 思考阶段：来回踱步找角度——不踩炮楼/小兵的方向随机走一段，停下转身面对目标观察
-            float safetyCap = thinkDelayRange.y + 8f;   // 走位比纯思考耗时，放宽兜底
-            float elapsed = 0f;
-            int observeRounds = Random.Range(3, 6);     // 随机看个三五次
-            Vector3 moveDir = Vector3.zero;             // 平滑移动方向（走位阶段复用）
             var cc = GetComponent<CharacterController>();
             var enemyData = gm.GetPlayer((playerId + 1) % 2);
             var ownData = gm.GetPlayer(playerId);
-            MarbleData threat = FindTowerThreat(enemyData, ownData);   // 首轮观察优先盯威胁
+            if (enemyData == null) yield break;
 
-            for (int round = 0; round < observeRounds; round++)
-            {
-                if (!turnActive || gm.GetCurrentPhase() != GamePhase.Playing || elapsed > safetyCap) break;
-
-                // 1) 选一个不踩到炮楼/小兵的方向，走一小段（面向行进方向）
-                Vector3? walkTarget = PickSafeWalkTarget(transform.position, ownData, enemyData);
-                if (walkTarget.HasValue)
-                {
-                    float walkT = 0f;
-                    while (turnActive && gm.GetCurrentPhase() == GamePhase.Playing && elapsed <= safetyCap)
-                    {
-                        Vector3 flatDelta = walkTarget.Value - transform.position;
-                        flatDelta.y = 0f;
-                        if (flatDelta.magnitude <= 0.15f || walkT > 2.5f) break;
-
-                        Vector3 desired = flatDelta.normalized;
-                        moveDir = Vector3.Slerp(moveDir, desired, Time.deltaTime * 4f).normalized;
-                        Vector3 step = moveDir * 1.1f * Time.deltaTime + Physics.gravity * Time.deltaTime;
-                        if (cc != null) cc.Move(step);
-                        else transform.position += step;
-                        transform.rotation = Quaternion.Slerp(transform.rotation,
-                            Quaternion.LookRotation(moveDir), Time.deltaTime * 6f);
-                        walkT += Time.deltaTime;
-                        elapsed += Time.deltaTime;
-                        yield return null;
-                    }
-                }
-
-                // 2) 停下转身面对观察目标（首轮盯威胁小兵或自家炮楼，之后炮楼/双方小兵随机）
-                Vector3? target = round == 0 && threat != null
-                    ? threat.transform.position
-                    : PickObservationTarget(enemyData, ownData, round == 0);
-                if (target.HasValue)
-                {
-                    Vector3 lookFlat = target.Value - transform.position;
-                    lookFlat.y = 0f;
-                    if (lookFlat.sqrMagnitude > 0.01f)
-                    {
-                        Quaternion faceRot = Quaternion.LookRotation(lookFlat.normalized);
-                        while (Quaternion.Angle(transform.rotation, faceRot) > 2f
-                               && turnActive && gm.GetCurrentPhase() == GamePhase.Playing
-                               && elapsed <= safetyCap)
-                        {
-                            transform.rotation = Quaternion.Slerp(transform.rotation, faceRot, Time.deltaTime * 5f);
-                            elapsed += Time.deltaTime;
-                            yield return null;
-                        }
-                    }
-
-                    // 3) 盯着目标观察约 1 秒（原地待机）
-                    float stare = Random.Range(0.8f, 1.2f);
-                    while (stare > 0f && turnActive && gm.GetCurrentPhase() == GamePhase.Playing
-                           && elapsed <= safetyCap)
-                    {
-                        stare -= Time.deltaTime;
-                        elapsed += Time.deltaTime;
-                        yield return null;
-                    }
-                }
-            }
-            if (!turnActive || gm.GetCurrentPhase() != GamePhase.Playing) yield break;
-
-            // 选弹决策：威胁小兵→吃子反制；否则打敌方炮楼
-            var enemy = gm.GetPlayer((playerId + 1) % 2);
-            if (enemy == null) yield break;
+            // ==== 选弹决策提前：远弹珠直奔，近弹珠才踱步思考 ====
             Vector3 targetPos;
             bool eating;
             var marble = PickFlickMarble(ownData, enemyData, out targetPos, out eating);
@@ -361,30 +298,133 @@ namespace Dapaolou.Player
                     yield break;
                 }
                 marble = marbles[0];
-                targetPos = enemy.towerCenter;
+                targetPos = enemyData.towerCenter;
                 eating = false;
             }
 
-            // 走到要弹的弹珠正后方（射线上，距弹珠 0.9m，在 1.5m 射程内）；
-            // 超时放宽到 10s——弹珠远时 3s 走不完会半路开火（远程弹珠 bug）
             Vector3 aimFlat = targetPos - marble.transform.position;
             aimFlat.y = 0f;
-            Vector3 behindSpot = marble.transform.position - aimFlat.normalized * 0.9f;
-            float wt = 0f;
-            while ((transform.position - behindSpot).magnitude > 0.12f && wt < 10f && turnActive)
+            float distToMarble = FlatDist(transform.position, marble.transform.position);
+            bool farMarble = distToMarble > farMarbleDistance;   // 远：不思考直接跑
+            float approachSpeed = farMarble ? runSpeed : 1.1f;
+            Debug.Log($"[AI] plan: marble={marble.name} dist={distToMarble:F1}m far={farMarble} eat={eating} run={approachSpeed:F1}m/s");
+
+            if (!farMarble)
             {
-                Vector3 flatDelta = behindSpot - transform.position;
-                flatDelta.y = 0f;
-                Vector3 desired = flatDelta.normalized;
-                moveDir = Vector3.Slerp(moveDir, desired, Time.deltaTime * 4f).normalized;
-                Vector3 step = moveDir * 1.1f * Time.deltaTime + Physics.gravity * Time.deltaTime;
-                if (cc != null) cc.Move(step);
-                else transform.position += step;
-                transform.rotation = Quaternion.Slerp(transform.rotation,
-                    Quaternion.LookRotation(moveDir), Time.deltaTime * 6f);
-                wt += Time.deltaTime;
-                yield return null;
+                // ==== 思考阶段：来回踱步找角度（弹珠在近处才慢悠悠思考） ====
+                float safetyCap = thinkDelayRange.y + 8f;
+                float elapsed = 0f;
+                int observeRounds = Random.Range(3, 6);
+                Vector3 moveDir = Vector3.zero;             // 平滑移动方向（走位阶段复用）
+                MarbleData threat = FindTowerThreat(enemyData, ownData);   // 首轮观察优先盯威胁
+
+                for (int round = 0; round < observeRounds; round++)
+                {
+                    if (!turnActive || gm.GetCurrentPhase() != GamePhase.Playing || elapsed > safetyCap) break;
+
+                    // 1) 选一个不踩到炮楼/小兵的方向，走一小段（面向行进方向）
+                    Vector3? walkTarget = PickSafeWalkTarget(transform.position, ownData, enemyData);
+                    if (walkTarget.HasValue)
+                    {
+                        float walkT = 0f;
+                        while (turnActive && gm.GetCurrentPhase() == GamePhase.Playing && elapsed <= safetyCap)
+                        {
+                            Vector3 flatDelta = walkTarget.Value - transform.position;
+                            flatDelta.y = 0f;
+                            if (flatDelta.magnitude <= 0.15f || walkT > 2.5f) break;
+
+                            Vector3 desired = flatDelta.normalized;
+                            moveDir = Vector3.Slerp(moveDir, desired, Time.deltaTime * 4f).normalized;
+                            Vector3 step = moveDir * 1.1f * Time.deltaTime + Physics.gravity * Time.deltaTime;
+                            if (cc != null) cc.Move(step);
+                            else transform.position += step;
+                            transform.rotation = Quaternion.Slerp(transform.rotation,
+                                Quaternion.LookRotation(moveDir), Time.deltaTime * 6f);
+                            walkT += Time.deltaTime;
+                            elapsed += Time.deltaTime;
+                            yield return null;
+                        }
+                    }
+
+                    // 2) 停下转身面对观察目标（首轮盯威胁小兵或自家炮楼，之后炮楼/双方小兵随机）
+                    Vector3? target = round == 0 && threat != null
+                        ? threat.transform.position
+                        : PickObservationTarget(enemyData, ownData, round == 0);
+                    if (target.HasValue)
+                    {
+                        Vector3 lookFlat = target.Value - transform.position;
+                        lookFlat.y = 0f;
+                        if (lookFlat.sqrMagnitude > 0.01f)
+                        {
+                            Quaternion faceRot = Quaternion.LookRotation(lookFlat.normalized);
+                            while (Quaternion.Angle(transform.rotation, faceRot) > 2f
+                                   && turnActive && gm.GetCurrentPhase() == GamePhase.Playing
+                                   && elapsed <= safetyCap)
+                            {
+                                transform.rotation = Quaternion.Slerp(transform.rotation, faceRot, Time.deltaTime * 5f);
+                                elapsed += Time.deltaTime;
+                                yield return null;
+                            }
+                        }
+
+                        // 3) 盯着目标观察约 1 秒（原地待机）
+                        float stare = Random.Range(0.8f, 1.2f);
+                        while (stare > 0f && turnActive && gm.GetCurrentPhase() == GamePhase.Playing
+                               && elapsed <= safetyCap)
+                        {
+                            stare -= Time.deltaTime;
+                            elapsed += Time.deltaTime;
+                            yield return null;
+                        }
+                    }
+                }
             }
+            if (!turnActive || gm.GetCurrentPhase() != GamePhase.Playing) yield break;
+
+            // ==== 发射站位：正后方→斜后→侧边候选点；被高障碍挡住走不到就换下一个 ====
+            // （矮障碍物 CharacterController 的 stepOffset 会自动踩上去）
+            bool inPosition = false;
+            Vector3 usedSpot = Vector3.zero;
+            Vector3 moveDir2 = Vector3.zero;
+            float[] spotAngles = { 0f, 25f, -25f, 50f, -50f, 80f, -80f };
+            foreach (var ang in spotAngles)
+            {
+                if (!turnActive) break;
+                Vector3 spotDir = Quaternion.AngleAxis(ang, Vector3.up) * aimFlat.normalized;
+                Vector3 spot = marble.transform.position - spotDir * 0.95f;
+                float walkT = 0f;
+                float maxWalk = farMarble ? 8f : 4f;
+                while (FlatDist(transform.position, spot) > 0.2f && walkT < maxWalk && turnActive)
+                {
+                    Vector3 flatDelta = spot - transform.position;
+                    flatDelta.y = 0f;
+                    Vector3 desired = flatDelta.normalized;
+                    moveDir2 = Vector3.Slerp(moveDir2, desired, Time.deltaTime * 5f).normalized;
+                    Vector3 step = moveDir2 * approachSpeed * Time.deltaTime + Physics.gravity * Time.deltaTime;
+                    if (cc != null) cc.Move(step);
+                    else transform.position += step;
+                    transform.rotation = Quaternion.Slerp(transform.rotation,
+                        Quaternion.LookRotation(moveDir2), Time.deltaTime * 6f);
+                    walkT += Time.deltaTime;
+                    yield return null;
+                }
+                if (FlatDist(transform.position, spot) <= 0.28f)
+                {
+                    inPosition = true;
+                    usedSpot = spot;
+                    Debug.Log($"[AI] spot: angle {ang} reached in {walkT:F1}s");
+                    break;
+                }
+                if (walkT >= maxWalk) Debug.Log($"[AI] spot: angle {ang} BLOCKED, trying next");
+                // 走不到（被墙/房子挡住）→ 换下一个角度
+            }
+            if (!turnActive) yield break;
+            if (!inPosition)
+            {
+                // 全部候选点都到不了（罕见）：仍从原地发射，防止回合卡死
+                Debug.Log($"[AI] Player {playerId}: no firing spot reached, firing anyway");
+            }
+
             // 站定后平滑转身正对发射方向，停顿后再弹
             Quaternion aimRot = Quaternion.LookRotation(aimFlat.normalized);
             float faceT = 0f;

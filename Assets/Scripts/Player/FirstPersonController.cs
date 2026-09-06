@@ -112,6 +112,10 @@ namespace Dapaolou.Player
         
         void Update()
         {
+            // 游戏结束：屏蔽视角/移动，鼠标让给胜利面板
+            if (Dapaolou.Game.GameManager.Instance != null
+                && Dapaolou.Game.GameManager.Instance.GetCurrentPhase() == Dapaolou.Game.GamePhase.GameOver) return;
+
             // 设置面板打开时：屏蔽视角/移动，鼠标让给 UI
             if (Dapaolou.UI.SettingsPanel.IsOpen) return;
             HandleMouseLook();
