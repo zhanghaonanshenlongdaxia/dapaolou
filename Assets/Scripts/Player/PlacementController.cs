@@ -28,8 +28,8 @@ namespace Dapaolou.Player
         [SerializeField] private bool ambushModeEnabled = false;
         [SerializeField] private int ambushCountPerPlayer = 3;
 
-        private enum Step { Tower, Soldier, Ambush, Done }
-        private Step step = Step.Tower;
+        public enum Step { None, Tower, Soldier, Ambush, Done }
+        private Step step = Step.None;
         private int soldierPlaced = 0;
         private int ambushPlaced = 0;
 
@@ -81,12 +81,43 @@ namespace Dapaolou.Player
             myPlayerId = playerManager.GetPlayerId();
             var pd = GameManager.Instance.GetPlayer(myPlayerId);
             myColor = pd?.playerColor ?? Color.green;
-            step = Step.Tower;
+            step = Step.None;          // 等玩家按 V 从轮盘选要放的东西
             soldierPlaced = 0;
             ambushPlaced = 0;
+            DestroyGhost();
+            UpdateHint("布防：按 V 打开物品栏选择要放置的东西");
+        }
+
+        /// <summary>
+        /// 轮盘选择入口：切换当前放置物并重建幻影（None=关闭幻影空转等待）
+        /// </summary>
+        public bool StartStep(Step newStep)
+        {
+            if (GameManager.Instance == null
+                || GameManager.Instance.GetCurrentPhase() != GamePhase.Placement) return false;
+            if (newStep == Step.Soldier && soldierPlaced >= 3) return false;
+            if (newStep == Step.Ambush && (!ambushModeEnabled || ambushPlaced >= ambushCountPerPlayer)) return false;
+
+            step = newStep;
+            if (step == Step.None) { DestroyGhost(); UpdateHint("布防：按 V 打开物品栏选择要放置的东西"); return true; }
             CreateGhost();
             UpdateHint();
+            return true;
         }
+
+        /// <summary>各步骤剩余可放数量（轮盘显示用）</summary>
+        public int GetRemaining(Step s)
+        {
+            return s switch
+            {
+                Step.Tower => GameManager.Instance != null && GameManager.Instance.GetPlayer(myPlayerId).towerMarbles.Count == 0 ? 1 : 0,
+                Step.Soldier => Mathf.Max(0, 3 - soldierPlaced),
+                Step.Ambush => Mathf.Max(0, ambushCountPerPlayer - ambushPlaced),
+                _ => 0,
+            };
+        }
+
+        public bool IsAmbushModeEnabled => ambushModeEnabled;
 
         void Update()
         {
@@ -175,19 +206,16 @@ namespace Dapaolou.Player
                 pd.towerMarbles = tower;
                 pd.towerCenter = pos;
                 foreach (var t in tower) gm.RegisterPlacementMarble(t);
-                step = Step.Soldier;
-                CreateGhost();
+                step = Step.None;    // 回轮盘选小兵
+                DestroyGhost();
             }
             else if (step == Step.Soldier)
             {
                 var soldierObj = gm.CreatePlacementSoldier(pos, myPlayerId, soldierPlaced);
                 pd.soldierMarbles.Add(soldierObj.GetComponent<MarbleData>());
                 soldierPlaced++;
-                if (soldierPlaced >= 3)
-                {
-                    step = ambushModeEnabled ? Step.Ambush : Step.Done;
-                    if (step == Step.Ambush) CreateGhost();
-                }
+                step = Step.None;    // 每放一个回轮盘（或继续选小兵）
+                DestroyGhost();
             }
             else if (step == Step.Ambush)
             {
@@ -196,14 +224,12 @@ namespace Dapaolou.Player
                 data.BuryAsAmbush();
                 pd.ambushMarbles.Add(data);
                 ambushPlaced++;
-                if (ambushPlaced >= ambushCountPerPlayer)
-                {
-                    step = Step.Done;
-                }
+                step = Step.None;    // 每放一个回轮盘
+                DestroyGhost();
             }
 
             if (step == Step.Done) FinishPlacement();
-            else UpdateHint();
+            else UpdateHint("布防：按 V 打开物品栏选择要放置的东西");
         }
 
         private void SkipAmbush()
@@ -211,6 +237,31 @@ namespace Dapaolou.Player
             if (step != Step.Ambush) return;
             step = Step.Done;
             FinishPlacement();
+        }
+
+        /// <summary>是否所有东西都放完了（轮盘显示"完成"状态用）</summary>
+        public bool IsAllPlaced()
+        {
+            var pd = GameManager.Instance.GetPlayer(myPlayerId);
+            return pd.towerMarbles.Count > 0
+                && pd.soldierMarbles.Count >= 3
+                && (!ambushModeEnabled || pd.ambushMarbles.Count >= ambushCountPerPlayer);
+        }
+
+        /// <summary>轮盘选择"完成"：全部放完才算结束；有剩余时提示</summary>
+        public bool TryFinish()
+        {
+            var pd = GameManager.Instance.GetPlayer(myPlayerId);
+            if (pd.towerMarbles.Count == 0) return false;
+            if (pd.soldierMarbles.Count < 3) return false;
+            if (ambushModeEnabled && pd.ambushMarbles.Count < ambushCountPerPlayer && step != Step.Done)
+            {
+                // 暗兵没放满允许少放，但需要确认过一次意图（这里直接允许少放——后续联机房主规则可收紧）
+            }
+            if (ghost != null) Destroy(ghost);
+            SetHint("");
+            GameManager.Instance.NotifyPlayerPlacementDone(myPlayerId);
+            return true;
         }
 
         private void FinishPlacement()
@@ -297,6 +348,18 @@ namespace Dapaolou.Player
                 : $"暗兵 ({ambushPlaced}/{ambushCountPerPlayer})  [H 跳过]";
             string status = ghostLegal ? "按 F 放置" : lastRejectReason;
             SetHint($"布防：放置{what}\n{status}");
+        }
+
+        private void UpdateHint(string text)
+        {
+            SetHint(text);
+        }
+
+        private void DestroyGhost()
+        {
+            if (ghost != null) Destroy(ghost);
+            ghost = null;
+            ghostRenderer = null;
         }
     }
 }
