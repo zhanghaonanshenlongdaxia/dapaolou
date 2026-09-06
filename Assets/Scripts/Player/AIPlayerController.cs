@@ -64,7 +64,38 @@ namespace Dapaolou.Player
         }
 
         /// <summary>
-        /// AI 回合流程：来回走位反复找角度（3~8s）→ 选弹珠 → 确定方向力度 → 发射 → 弹珠特写
+        /// 挑选观察目标：首次优先敌方炮楼，之后在敌方/我方存活小兵与炮楼间随机
+        /// </summary>
+        private Vector3? PickObservationTarget(PlayerData enemy, PlayerData own, bool preferTower)
+        {
+            var candidates = new System.Collections.Generic.List<Vector3>();
+            if (enemy != null && !enemy.towerDestroyed)
+            {
+                candidates.Add(enemy.towerCenter);
+            }
+            if (preferTower && candidates.Count > 0) return candidates[0];
+
+            if (enemy != null)
+            {
+                foreach (var s in enemy.soldierMarbles)
+                {
+                    if (s != null && s.state != MarbleState.Destroyed) candidates.Add(s.transform.position);
+                }
+            }
+            if (own != null)
+            {
+                foreach (var s in own.soldierMarbles)
+                {
+                    if (s != null && s.state != MarbleState.Destroyed) candidates.Add(s.transform.position);
+                }
+            }
+
+            if (candidates.Count == 0) return null;
+            return candidates[Random.Range(0, candidates.Count)];
+        }
+
+        /// <summary>
+        /// AI 回合流程：站定观察目标（3~8s，面向敌方炮楼/小兵、我方小兵）→ 选弹珠 → 走到弹珠后方 → 确定方向力度 → 发射 → 弹珠特写
         /// </summary>
         private IEnumerator TakeTurn()
         {
@@ -74,64 +105,46 @@ namespace Dapaolou.Player
             var gm = GameManager.Instance;
             if (gm == null || gm.GetCurrentPhase() != GamePhase.Playing) yield break;
 
-            // 思考阶段：来回移动踱步、左右张望，模拟反复找角度
+            // 思考阶段：站定原地轮流观察目标，面向被观察对象（静止时由模型播 Idle）
             float thinkTime = Random.Range(thinkDelayRange.x, thinkDelayRange.y);
             float elapsed = 0f;
-            Vector3 wanderTarget = transform.position;
-            Vector3 moveDir = Vector3.zero;        // 平滑移动方向
-            float pauseTimer = 0.5f;                // 初始先张望一下
+            Vector3 moveDir = Vector3.zero;        // 平滑移动方向（走位阶段复用）
             var cc = GetComponent<CharacterController>();
-            var enemyPreview = gm.GetPlayer((playerId + 1) % 2);
-            Vector3 aimPreviewDir = enemyPreview != null
-                ? (enemyPreview.towerCenter - transform.position).normalized
-                : transform.forward;
+            var enemyData = gm.GetPlayer((playerId + 1) % 2);
+            var ownData = gm.GetPlayer(playerId);
+            bool observedFirstTarget = false;
 
             while (elapsed < thinkTime && turnActive && gm.GetCurrentPhase() == GamePhase.Playing)
             {
-                Vector3 flatDelta = wanderTarget - transform.position;
-                flatDelta.y = 0f;
+                Vector3? target = PickObservationTarget(enemyData, ownData, !observedFirstTarget);
+                if (!target.HasValue) break;
+                observedFirstTarget = true;
 
-                if (pauseTimer > 0f)
+                // 转身面向观察目标
+                Vector3 lookFlat = target.Value - transform.position;
+                lookFlat.y = 0f;
+                if (lookFlat.sqrMagnitude > 0.01f)
                 {
-                    // 停顿张望：原地左右看，模拟反复找角度
-                    pauseTimer -= Time.deltaTime;
-                    moveDir = Vector3.Slerp(moveDir, Vector3.zero, Time.deltaTime * 6f);
-                    float sway = Mathf.Sin(elapsed * 2.5f) * 14f;
-                    Vector3 lookDir = Quaternion.AngleAxis(sway, Vector3.up) * aimPreviewDir;
-                    transform.rotation = Quaternion.Slerp(transform.rotation,
-                        Quaternion.LookRotation(lookDir), Time.deltaTime * 5f);
-
-                    if (pauseTimer <= 0f && flatDelta.magnitude < 0.5f)
+                    Quaternion faceRot = Quaternion.LookRotation(lookFlat.normalized);
+                    while (Quaternion.Angle(transform.rotation, faceRot) > 2f
+                           && elapsed < thinkTime && turnActive
+                           && gm.GetCurrentPhase() == GamePhase.Playing)
                     {
-                        // 张望结束：选下一个至少 0.5m 外的走位点
-                        Vector3 offset;
-                        int guard = 0;
-                        do
-                        {
-                            offset = new Vector3(Random.Range(-1.4f, 1.4f), 0f, Random.Range(-0.8f, 0.8f));
-                        } while (offset.magnitude < 0.5f && ++guard < 10);
-                        wanderTarget = transform.position + offset;
+                        transform.rotation = Quaternion.Slerp(transform.rotation, faceRot, Time.deltaTime * 5f);
+                        elapsed += Time.deltaTime;
+                        yield return null;
                     }
                 }
-                else if (flatDelta.magnitude > 0.18f)
-                {
-                    // 平滑移动：方向渐变转身先行 + 重力贴地，杜绝瞬移感
-                    Vector3 desired = flatDelta.normalized;
-                    moveDir = Vector3.Slerp(moveDir, desired, Time.deltaTime * 3f).normalized;
-                    Vector3 step = moveDir * 1.1f * Time.deltaTime + Physics.gravity * Time.deltaTime;
-                    if (cc != null) cc.Move(step);
-                    else transform.position += step;
-                    transform.rotation = Quaternion.Slerp(transform.rotation,
-                        Quaternion.LookRotation(moveDir), Time.deltaTime * 6f);
-                }
-                else
-                {
-                    // 到点：停顿张望一会儿再走下一个点
-                    pauseTimer = Random.Range(0.4f, 0.9f);
-                }
 
-                elapsed += Time.deltaTime;
-                yield return null;
+                // 盯着目标观察一会儿（原地待机）
+                float stare = Random.Range(0.7f, 1.4f);
+                while (stare > 0f && elapsed < thinkTime && turnActive
+                       && gm.GetCurrentPhase() == GamePhase.Playing)
+                {
+                    stare -= Time.deltaTime;
+                    elapsed += Time.deltaTime;
+                    yield return null;
+                }
             }
             if (!turnActive || gm.GetCurrentPhase() != GamePhase.Playing) yield break;
 

@@ -2922,8 +2922,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 252292202}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: 0.49242356, z: -0, w: 0.87035567}
-  m_LocalPosition: {x: 1.2839068, y: -0.1, z: 3.6880329}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -2964,7 +2964,11 @@ MonoBehaviour:
   playerColor: {r: 0, g: 0, b: 1, a: 1}
   riggedModelRoot: {fileID: 1172969223}
   modelAnimator: {fileID: 0}
-  moveDetectPerFrame: 0.02
+  moveSpeedThreshold: 0.25
+  markerHeight: 2.05
+  markerSize: 0.12
+  markerBounceAmplitude: 0.12
+  markerBounceSpeed: 3
 --- !u!1 &252627649
 GameObject:
   m_ObjectHideFlags: 0
@@ -15177,8 +15181,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1652751398}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0.49242356, z: -0, w: 0.87035567}
-  m_LocalPosition: {x: -1.2839068, y: -0.1, z: 3.6880329}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -15219,7 +15223,11 @@ MonoBehaviour:
   playerColor: {r: 0, g: 0, b: 1, a: 1}
   riggedModelRoot: {fileID: 1683444476}
   modelAnimator: {fileID: 0}
-  moveDetectPerFrame: 0.02
+  moveSpeedThreshold: 0.25
+  markerHeight: 2.05
+  markerSize: 0.12
+  markerBounceAmplitude: 0.12
+  markerBounceSpeed: 3
 --- !u!1 &1666975703
 GameObject:
   m_ObjectHideFlags: 0

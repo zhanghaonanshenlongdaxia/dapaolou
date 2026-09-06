@@ -47,6 +47,13 @@ namespace Dapaolou.Player
         [Tooltip("根对象移速超过该值（米/秒）视为移动中，自动切换 Idle/Walk")]
         [SerializeField] private float moveSpeedThreshold = 0.25f;
         
+        [Header("阵营标识")]
+        [Tooltip("头顶常驻上下弹跳的小球，颜色区分阵营（替代身体染色）")]
+        [SerializeField] private float markerHeight = 2.05f;
+        [SerializeField] private float markerSize = 0.12f;
+        [SerializeField] private float markerBounceAmplitude = 0.12f;
+        [SerializeField] private float markerBounceSpeed = 3f;
+        
         // 内部状态
         private AnimatorState currentState = AnimatorState.Idle;
         private AnimatorState appliedClipState = (AnimatorState)(-1);
@@ -58,6 +65,10 @@ namespace Dapaolou.Player
         
         // 部件引用
         private Transform[] bodyParts;
+        
+        // 阵营标识
+        private Transform factionMarker;
+        private Material markerMaterial;
         
         public enum AnimatorState
         {
@@ -89,10 +100,19 @@ namespace Dapaolou.Player
             
             // 缓存部件
             bodyParts = new Transform[] { bodyRoot, head, leftArm, rightArm, leftLeg, rightLeg };
+
+            CreateFactionMarker();
         }
-        
+
         void Update()
         {
+            // 阵营标识持续上下弹跳
+            if (factionMarker != null)
+            {
+                float bob = Mathf.Sin(Time.time * markerBounceSpeed) * markerBounceAmplitude;
+                factionMarker.localPosition = new Vector3(0f, markerHeight + bob, 0f);
+            }
+
             if (IsRigged)
             {
                 UpdateRiggedAnimation();
@@ -170,6 +190,33 @@ namespace Dapaolou.Player
             
             modelAnimator.CrossFade(clipState, 0.15f, 0, 0);
             appliedClipState = currentState;
+        }
+        
+        #endregion
+        
+        #region 阵营标识
+        
+        /// <summary>
+        /// 创建头顶阵营标识小球：无碰撞、无阴影，Unlit 材质保证远处也醒目
+        /// </summary>
+        private void CreateFactionMarker()
+        {
+            GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            marker.name = "FactionMarker";
+            Collider col = marker.GetComponent<Collider>();
+            if (col != null) Destroy(col);
+            marker.transform.SetParent(transform, false);
+            marker.transform.localPosition = new Vector3(0f, markerHeight, 0f);
+            marker.transform.localScale = Vector3.one * markerSize;
+            
+            markerMaterial = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+            markerMaterial.SetColor("_BaseColor", playerColor);
+            Renderer r = marker.GetComponent<Renderer>();
+            r.sharedMaterial = markerMaterial;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+            
+            factionMarker = marker.transform;
         }
         
         #endregion
@@ -459,6 +506,12 @@ namespace Dapaolou.Player
         public void SetPlayerColor(Color color)
         {
             playerColor = color;
+
+            // 阵营色渲染到头顶标识上（身体不再按阵营染色）
+            if (markerMaterial != null)
+            {
+                markerMaterial.SetColor("_BaseColor", color);
+            }
 
             // 骨骼模型使用预制体自带配色（Blue/Brown/Green/Yellow），不做运行时重染色
             if (IsRigged) return;
