@@ -28,8 +28,14 @@ namespace Dapaolou.UI
             if (nextButton != null) nextButton.onClick.AddListener(() => { if (AM != null) AM.NextBgm(); });
             if (volumeSlider != null)
             {
-                if (AM != null) volumeSlider.SetValueWithoutNotify(AM.bgmVolume);
-                volumeSlider.onValueChanged.AddListener(v => { if (AM != null) AM.SetBgmVolume(v); });
+                var saved = PlayerPrefs.GetFloat("set_volume", AM != null ? AM.bgmVolume : 0.4f);
+                volumeSlider.SetValueWithoutNotify(saved);
+                if (AM != null) AM.SetBgmVolume(saved);
+                volumeSlider.onValueChanged.AddListener(v =>
+                {
+                    if (AM != null) AM.SetBgmVolume(v);
+                    PlayerPrefs.SetFloat("set_volume", v);
+                });
             }
         }
 
