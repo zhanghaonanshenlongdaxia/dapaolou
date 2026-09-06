@@ -60,6 +60,13 @@ namespace Dapaolou.Player
         private float currentHeight;
         private bool isFlicking = false;
         private float flickTimer = 0f;
+
+        /// <summary>鼠标灵敏度（设置界面可调，持久化 set_sens）</summary>
+        public float MouseSensitivity
+        {
+            get => mouseSensitivity;
+            set => mouseSensitivity = Mathf.Clamp(value, 0.2f, 6f);
+        }
         
         // 摄像机晃动
         private float cameraBobTimer = 0f;
@@ -84,6 +91,9 @@ namespace Dapaolou.Player
             {
                 cameraOriginalPosition = playerCamera.transform.localPosition;
             }
+            
+            // 应用设置界面持久化的灵敏度
+            mouseSensitivity = PlayerPrefs.GetFloat("set_sens", mouseSensitivity);
             
             // 锁定鼠标
             Cursor.lockState = CursorLockMode.Locked;
