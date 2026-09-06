@@ -30,6 +30,8 @@ namespace Dapaolou.UI
         private GameObject wheelRoot;
         private readonly System.Collections.Generic.List<(WheelItem item, Image img)> sectors
             = new System.Collections.Generic.List<(WheelItem, Image)>();
+        private readonly System.Collections.Generic.List<(WheelItem item, Image icon)> icons
+            = new System.Collections.Generic.List<(WheelItem, Image)>();
 
         private int myPlayerId = 0;
         private static readonly string[] ItemNames = { "炮楼", "小兵", "暗兵", "完成布防" };
@@ -71,8 +73,8 @@ namespace Dapaolou.UI
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);   // 屏幕中心
             rt.sizeDelta = Vector2.zero;
 
-            // 每个扇区：一张预渲染的 120° 扇环 Sprite，旋转到对应角度
-            Sprite sectorSprite = CreateSectorSprite(96);
+            // 每个扇区：一张预渲染的 120° 扇环 Sprite（外扩版），旋转到对应角度
+            Sprite sectorSprite = CreateSectorSprite(160);
             for (int i = 0; i < (int)WheelItem.Count; i++)
             {
                 var item = (WheelItem)i;
@@ -88,10 +90,23 @@ namespace Dapaolou.UI
                 irt.anchorMin = irt.anchorMax = new Vector2(0.5f, 0.5f);
                 irt.localPosition = Vector3.zero;
                 irt.localRotation = Quaternion.Euler(0f, 0f, -i * (360f / (float)WheelItem.Count));
-                // Sprite 尺寸 = 直径 2*(radius + halfThickness)，pivot 在圆心
-                irt.sizeDelta = Vector2.one * (radius + 55f) * 2f;
+                // Sprite 直径按 1080p 基准换算：外径顶到 radius+90
+                irt.sizeDelta = Vector2.one * (radius + 90f) * 2f * (Screen.height / 1080f);
 
                 sectors.Add((item, img));
+
+                // 物品图标：叠在扇区中心方向、离圆心 radius 处
+                var iconGo = new GameObject($"WheelIcon_{ItemNames[i]}", typeof(Image), typeof(RectTransform));
+                iconGo.transform.SetParent(wheelRoot.transform, false);
+                var iconImg = iconGo.GetComponent<Image>();
+                iconImg.sprite = CreateItemIconSprite(item);
+                iconImg.raycastTarget = false;
+                float iconAng = (90f - i * (360f / (float)WheelItem.Count)) * Mathf.Deg2Rad;
+                var iconRt = iconGo.GetComponent<RectTransform>();
+                iconRt.anchorMin = iconRt.anchorMax = new Vector2(0.5f, 0.5f);
+                iconRt.localPosition = new Vector3(Mathf.Cos(iconAng) * radius, Mathf.Sin(iconAng) * radius, 0f);
+                iconRt.sizeDelta = Vector2.one * 52f * (Screen.height / 1080f);
+                icons.Add((item, iconImg));
             }
 
             // 中心标签
@@ -111,15 +126,16 @@ namespace Dapaolou.UI
         }
 
         /// <summary>
-        /// CPU 渲染一张 120° 圆环扇形贴图（透明背景），pivot 设在圆心
+        /// CPU 渲染一张 120° 圆环扇形贴图（透明背景），pivot 设在圆心。
+        /// 外扩：内径降低、外径顶满，扇区间只留 3° 缝隙
         /// </summary>
         private Sprite CreateSectorSprite(int size)
         {
             var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
             tex.filterMode = FilterMode.Bilinear;
             float half = size / 2f;
-            float r0 = half * 0.38f, r1 = half * 0.96f;
-            float halfSweep = 60f - 4f;   // 留 4° 缝隙
+            float r0 = half * 0.30f, r1 = half * 0.99f;
+            float halfSweep = 60f - 3f;   // 留 3° 缝隙（外扩减少重叠感）
 
             for (int y = 0; y < size; y++)
             {
@@ -128,7 +144,6 @@ namespace Dapaolou.UI
                     float dx = x - half + 0.5f, dy = y - half + 0.5f;
                     float dist = Mathf.Sqrt(dx * dx + dy * dy);
                     float ang = Mathf.Atan2(dy, dx) * Mathf.Rad2Deg;   // -180..180，0=右
-                    // 扇区：从 90-60 到 90+60（顶部扇区），底部中心留缺口
                     bool inSweep = Mathf.Abs(Mathf.DeltaAngle(ang, 90f)) <= halfSweep;
                     bool inRing = dist >= r0 && dist <= r1;
                     Color c = Color.clear;
@@ -137,13 +152,12 @@ namespace Dapaolou.UI
                         if (inSweep)
                         {
                             c = Color.white;
-                            // 内外边缘抗锯齿
                             float edge = Mathf.Min((dist - r0), (r1 - dist));
                             if (edge < 1.5f) c.a = edge / 1.5f;
                         }
                         else if (Mathf.Abs(Mathf.DeltaAngle(ang, 90f)) <= halfSweep + 1.5f)
                         {
-                            c = new Color(1f, 1f, 1f, 0.5f);   // 角度边缘柔化
+                            c = new Color(1f, 1f, 1f, 0.5f);
                         }
                     }
                     tex.SetPixel(x, y, c);
@@ -154,6 +168,75 @@ namespace Dapaolou.UI
             Sprite sp = Sprite.Create(tex, new Rect(0, 0, size, size),
                 new Vector2(0.5f, 0.5f), 100f);   // pivot=圆心
             sp.name = "WheelSector";
+            return sp;
+        }
+
+        /// <summary>
+        /// CPU 渲染物品图标贴图（96px 透明底）：
+        /// tower=三叠圆塔 / soldier=单弹珠+高光 / ambush=土包 / finish=对勾
+        /// </summary>
+        private Sprite CreateItemIconSprite(WheelItem item)
+        {
+            const int size = 96;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Bilinear;
+            float half = size / 2f;
+
+            bool InCircle(float px, float py, float cx, float cy, float r)
+            {
+                float dx = px - cx, dy = py - cy;
+                return dx * dx + dy * dy <= r * r;
+            }
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float px = x + 0.5f, py = y + 0.5f;
+                    Color c = Color.clear;
+
+                    switch (item)
+                    {
+                        case WheelItem.Tower:
+                        {
+                            float r = 11f;
+                            if (InCircle(px, py, half, half - 22f, r)) c = Color.white;
+                            else if (InCircle(px, py, half - 12f, half - 2f, r)) c = Color.white;
+                            else if (InCircle(px, py, half + 12f, half - 2f, r)) c = Color.white;
+                            else if (InCircle(px, py, half, half + 16f, r)) c = Color.white;
+                            break;
+                        }
+                        case WheelItem.Soldier:
+                        {
+                            if (InCircle(px, py, half, half, 16f))
+                            {
+                                c = Color.white;
+                                if (InCircle(px, py, half - 5f, half + 5f, 5f)) c = new Color(1f, 1f, 1f, 0.55f);
+                            }
+                            break;
+                        }
+                        case WheelItem.Ambush:
+                        {
+                            float dx = px - half, dy = py - (half - 6f);
+                            if (dx * dx + dy * dy <= 18f * 18f && py >= half - 6f) c = Color.white;
+                            break;
+                        }
+                        case WheelItem.Finish:
+                        {
+                            if ((Mathf.Abs(px - py - 6f) < 4f && px > half - 16f && px < half + 6f && py > half - 10f)
+                                || (Mathf.Abs(px + py - (size + 26f)) < 4f && px > half + 2f && px < half + 26f && py > half - 22f && py < half + 2f))
+                                c = Color.white;
+                            break;
+                        }
+                    }
+                    tex.SetPixel(x, y, c);
+                }
+            }
+            tex.Apply();
+
+            Sprite sp = Sprite.Create(tex, new Rect(0, 0, size, size),
+                new Vector2(0.5f, 0.5f), 100f);
+            sp.name = $"WheelIcon_{item}";
             return sp;
         }
 
@@ -244,6 +327,19 @@ namespace Dapaolou.UI
                 if (item == WheelItem.Finish) c = finishColor;
                 if (item == hoverItem && !disabled) c = hoverColor;
                 img.color = c;
+            }
+            // 图标联动灰显/高亮
+            foreach (var (item, icon) in icons)
+            {
+                bool disabled = item switch
+                {
+                    WheelItem.Tower => placement.GetRemaining(PlacementController.Step.Tower) <= 0,
+                    WheelItem.Soldier => placement.GetRemaining(PlacementController.Step.Soldier) <= 0,
+                    WheelItem.Ambush => !(placement.IsAmbushModeEnabled && placement.GetRemaining(PlacementController.Step.Ambush) > 0),
+                    _ => false,
+                };
+                if (icon != null) icon.color = (item == hoverItem && !disabled) ? Color.white
+                    : (disabled ? new Color(1f, 1f, 1f, 0.35f) : Color.white);
             }
         }
 

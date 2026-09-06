@@ -89,15 +89,23 @@ namespace Dapaolou.Player
         }
 
         /// <summary>
-        /// 轮盘选择入口：切换当前放置物并重建幻影（None=关闭幻影空转等待）
+        /// 轮盘选择入口：切换当前放置物并重建幻影（None=关闭幻影空转等待）。
+        /// 数量校验以 PlayerData 实际数据为准（防会话残留计数器污染）
         /// </summary>
         public bool StartStep(Step newStep)
         {
+            TempLog("enter");
             if (GameManager.Instance == null
                 || GameManager.Instance.GetCurrentPhase() != GamePhase.Placement) return false;
-            if (newStep == Step.Soldier && soldierPlaced >= 3) return false;
-            if (newStep == Step.Ambush && (!ambushModeEnabled || ambushPlaced >= ambushCountPerPlayer)) return false;
+            var pd = GameManager.Instance.GetPlayer(myPlayerId);
+            if (pd == null) return false;
 
+            TempLog("after-pd-null-check");
+            if (newStep == Step.Soldier && pd.soldierMarbles.Count >= 3) return false;
+            TempLog("after-soldier-check");
+            if (newStep == Step.Ambush && (!ambushModeEnabled || pd.ambushMarbles.Count >= ambushCountPerPlayer)) return false;
+
+            TempLog("before-create-ghost");
             step = newStep;
             if (step == Step.None) { DestroyGhost(); UpdateHint("布防：按 V 打开物品栏选择要放置的东西"); return true; }
             CreateGhost();
@@ -105,14 +113,16 @@ namespace Dapaolou.Player
             return true;
         }
 
-        /// <summary>各步骤剩余可放数量（轮盘显示用）</summary>
+        /// <summary>各步骤剩余可放数量（以 PlayerData 实际数据为准，轮盘显示用）</summary>
         public int GetRemaining(Step s)
         {
+            var pd = GameManager.Instance != null ? GameManager.Instance.GetPlayer(myPlayerId) : null;
+            if (pd == null) return 0;
             return s switch
             {
-                Step.Tower => GameManager.Instance != null && GameManager.Instance.GetPlayer(myPlayerId).towerMarbles.Count == 0 ? 1 : 0,
-                Step.Soldier => Mathf.Max(0, 3 - soldierPlaced),
-                Step.Ambush => Mathf.Max(0, ambushCountPerPlayer - ambushPlaced),
+                Step.Tower => pd.towerMarbles.Count == 0 ? 1 : 0,
+                Step.Soldier => Mathf.Max(0, 3 - pd.soldierMarbles.Count),
+                Step.Ambush => Mathf.Max(0, ambushCountPerPlayer - pd.ambushMarbles.Count),
                 _ => 0,
             };
         }
@@ -138,7 +148,10 @@ namespace Dapaolou.Player
             var col = ghost.GetComponent<Collider>();
             if (col != null) Destroy(col);
             ghostRenderer = ghost.GetComponent<Renderer>();
-            var m = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+            var shader = Shader.Find("Universal Render Pipeline/Unlit");
+            if (shader == null) shader = Shader.Find("Unlit/Color");
+            if (shader == null) shader = Shader.Find("Sprites/Default");
+            var m = new Material(shader);
             m.SetFloat("_Surface", 1f);
             m.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
             m.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
@@ -248,15 +261,19 @@ namespace Dapaolou.Player
                 && (!ambushModeEnabled || pd.ambushMarbles.Count >= ambushCountPerPlayer);
         }
 
-        /// <summary>轮盘选择"完成"：全部放完才算结束；有剩余时提示</summary>
+        /// <summary>轮盘选择"完成"：炮楼+明兵必须齐（暗兵可少放），不满足则提示原因</summary>
         public bool TryFinish()
         {
             var pd = GameManager.Instance.GetPlayer(myPlayerId);
-            if (pd.towerMarbles.Count == 0) return false;
-            if (pd.soldierMarbles.Count < 3) return false;
-            if (ambushModeEnabled && pd.ambushMarbles.Count < ambushCountPerPlayer && step != Step.Done)
+            if (pd.towerMarbles.Count == 0)
             {
-                // 暗兵没放满允许少放，但需要确认过一次意图（这里直接允许少放——后续联机房主规则可收紧）
+                UpdateHint("必须先放置炮楼！");
+                return false;
+            }
+            if (pd.soldierMarbles.Count < 3)
+            {
+                UpdateHint($"明兵必须放满 3 个（已放 {pd.soldierMarbles.Count}）！");
+                return false;
             }
             if (ghost != null) Destroy(ghost);
             SetHint("");
@@ -344,8 +361,11 @@ namespace Dapaolou.Player
 
         private void UpdateHint()
         {
-            string what = step == Step.Tower ? "炮楼" : step == Step.Soldier ? $"小兵 ({soldierPlaced}/3)"
-                : $"暗兵 ({ambushPlaced}/{ambushCountPerPlayer})  [H 跳过]";
+            var pd = GameManager.Instance != null ? GameManager.Instance.GetPlayer(myPlayerId) : null;
+            int placed = pd != null ? pd.soldierMarbles.Count : soldierPlaced;
+            int ambPlaced = pd != null ? pd.ambushMarbles.Count : ambushPlaced;
+            string what = step == Step.Tower ? "炮楼" : step == Step.Soldier ? $"小兵 ({placed}/3)"
+                : $"暗兵 ({ambPlaced}/{ambushCountPerPlayer})  [H 跳过]";
             string status = ghostLegal ? "按 F 放置" : lastRejectReason;
             SetHint($"布防：放置{what}\n{status}");
         }
@@ -353,6 +373,12 @@ namespace Dapaolou.Player
         private void UpdateHint(string text)
         {
             SetHint(text);
+        }
+
+        private void TempLog(string msg)
+        {
+            var pd = GameManager.Instance != null ? GameManager.Instance.GetPlayer(myPlayerId) : null;
+            Debug.Log($"[SS] {msg} pd={(pd != null)} pdSoldiers={(pd != null && pd.soldierMarbles != null ? pd.soldierMarbles.Count.ToString() : "NULL")} pdTower={(pd != null && pd.towerMarbles != null ? pd.towerMarbles.Count.ToString() : "NULL")} pdAmbush={(pd != null && pd.ambushMarbles != null ? pd.ambushMarbles.Count.ToString() : "NULL")}");
         }
 
         private void DestroyGhost()

@@ -66,7 +66,10 @@ namespace Dapaolou.Marble
             mound.transform.localPosition = new Vector3(0f, 0.05f, 0f);
             mound.transform.localScale = new Vector3(0.14f, 0.07f, 0.14f);
             var mr = mound.GetComponent<MeshRenderer>();
-            var mm = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+            var unlitShader = Shader.Find("Universal Render Pipeline/Unlit");
+            if (unlitShader == null) unlitShader = Shader.Find("Unlit/Color");
+            if (unlitShader == null) unlitShader = Shader.Find("Sprites/Default");
+            var mm = new Material(unlitShader);
             mm.SetColor("_BaseColor", new Color(0.45f, 0.33f, 0.2f, 1f));   // 干土色
             mr.sharedMaterial = mm;
         }

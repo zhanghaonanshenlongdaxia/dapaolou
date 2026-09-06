@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using UnityEngine;
 using System.Linq;
+using System.Collections;
 using Dapaolou.Marble;
+using Dapaolou.Player;
 
 namespace Dapaolou.Game
 {
@@ -156,33 +158,68 @@ namespace Dapaolou.Game
                 marbleShooter.OnStateChanged += OnShootStateChanged;
             }
 
-            // 布防模式：不预摆炮楼/小兵，进入 Placement 阶段由玩家自选位置
+            // 布防模式：不预摆炮楼/小兵，进入 Placement 阶段
+            // 人类（isLocalHuman）由 PlacementController 自行放置；AI 立即开始自动布防（并行）
             currentPhase = GamePhase.Placement;
-            OnPlacementStart?.Invoke(0);   // 人类先放
+            OnPlacementStart?.Invoke(0);
+            StartCoroutine(AutoDeployAICoroutine());
         }
 
-        /// <summary>
-        /// 某玩家布防完成。人类放完→AI 自动布防→正式开局
-        /// </summary>
-        public void NotifyPlayerPlacementDone(int playerId)
-        {
-            if (currentPhase != GamePhase.Placement) return;
-            if (playerId != 0) { StartGame(); return; }
+        private bool aiDeploymentDone = false;
 
-            // AI 自动布防
-            var humanTower = players[0].towerCenter;
+        /// <summary>
+        /// AI 并行自动布防协程：塔→明兵×3→暗兵×3，带节奏延时
+        /// </summary>
+        private IEnumerator AutoDeployAICoroutine()
+        {
+            yield return new WaitForSeconds(1.5f);   // 等场景稳定
+
             var ai = players[1];
+            var humanTower = players[0].towerCenter;
             Vector3 aiTowerPos = AutoPlaceTowerForAI(humanTower);
             var towerMarbles = towerBuilder.BuildTower(aiTowerPos, 1, playerColors[1]);
             ai.towerMarbles = towerMarbles;
             ai.towerCenter = aiTowerPos;
             allMarbles.AddRange(towerMarbles);
-            AutoPlaceSoldiersForAI(ai, aiTowerPos, humanTower, gameConfig.soldierCountPerPlayer, false);
+            Debug.Log($"[Placement] AI tower deployed at {aiTowerPos}");
+            yield return new WaitForSeconds(1.2f);
+
+            // 明兵×3
+            var humanAmbush = new System.Collections.Generic.List<MarbleData>();   // 此时人类还没放暗兵
+            DeployAISoldiers(ai, aiTowerPos, humanTower, gameConfig.soldierCountPerPlayer, false, humanAmbush);
+            yield return new WaitForSeconds(0.8f);
+
+            // 暗兵×3（若模式开）
             if (gameConfig.ambushModeEnabled)
             {
-                AutoPlaceSoldiersForAI(ai, aiTowerPos, humanTower, gameConfig.ambushCountPerPlayer, true);
+                DeployAISoldiers(ai, aiTowerPos, humanTower, gameConfig.ambushCountPerPlayer, true, humanAmbush);
             }
-            Debug.Log($"[Placement] AI deployed at {aiTowerPos}");
+            aiDeploymentDone = true;
+            Debug.Log("[Placement] AI deployment complete");
+
+            // 双方都完成 → 开局
+            TryStartGameAfterPlacement();
+        }
+
+        /// <summary>人类布防完成回调：若 AI 也完成则开局</summary>
+        public void NotifyPlayerPlacementDone(int playerId)
+        {
+            if (currentPhase != GamePhase.Placement) return;
+            if (playerId != 0)
+            {
+                // AI 侧完成由协程管理
+                return;
+            }
+
+            // AI 若还没布完（协程在跑），等协程结束的 TryStartGameAfterPlacement 兜底
+            TryStartGameAfterPlacement();
+        }
+
+        private void TryStartGameAfterPlacement()
+        {
+            if (currentPhase != GamePhase.Placement) return;
+            if (!aiDeploymentDone) return;
+            if (players[0].towerMarbles.Count == 0) return;   // 人类还没放塔
             StartGame();
         }
 
@@ -211,6 +248,9 @@ namespace Dapaolou.Game
                     }
                 }
                 if (tooCloseToAmbush) continue;
+                // 避开障碍物（房子/墙等，防止弹珠被埋进碰撞体）
+                if (Physics.CheckSphere(candidate + Vector3.up * 0.5f, 1.2f,
+                    ~0, UnityEngine.QueryTriggerInteraction.Ignore)) continue;
                 float d = Vector3.Distance(candidate, humanTower);
                 if (d > bestDist) { bestDist = d; best = candidate; }
             }
@@ -219,13 +259,13 @@ namespace Dapaolou.Game
         }
 
         /// <summary>
-        /// AI 批量放兵：明兵贴塔 1.5~3m，暗兵可远（≤ambushMaxRadius）且距人类炮楼 ≥minTowerDistance
+        /// AI 批量放兵：明兵贴塔 1.5~3m，暗兵可远（≤ambushMaxRadius）且距人类炮楼 ≥minTowerDistance；
+        /// 若人类已放暗兵，落点避开（AI 不主动踩对方暗兵）
         /// </summary>
-        private void AutoPlaceSoldiersForAI(PlayerData ai, Vector3 aiTower, Vector3 humanTower, int count, bool ambush)
+        private void DeployAISoldiers(PlayerData ai, Vector3 aiTower, Vector3 humanTower, int count, bool ambush,
+            System.Collections.Generic.List<MarbleData> humanAmbush)
         {
             float maxR = ambush ? gameConfig.ambushMaxRadius : gameConfig.soldierMaxRadius;
-            var humanAmbush = players[0].ambushMarbles
-                .Where(m => m != null && m.state != MarbleState.Destroyed).ToList();
             for (int i = 0; i < count; i++)
             {
                 Vector3 pos = Vector3.zero;
@@ -250,6 +290,32 @@ namespace Dapaolou.Game
                     break;
                 }
                 if (!found) pos = aiTower + new Vector3(1.5f + i * 0.18f, 0f, 1.2f);
+
+                // 落点贴地：从上方 2m 往下打地面（排除高障碍——打到 1m 以上高度的命中=落在房顶/墙上，弃用重找）
+                Vector3 probe = pos + Vector3.up * 2f;
+                bool validGround = false;
+                for (int retry = 0; retry < 5 && !validGround; retry++)
+                {
+                    if (Physics.Raycast(probe, Vector3.down, out var groundHit, 4f))
+                    {
+                        if (groundHit.point.y < 0.6f)   // 地面高度合理（非房顶/墙顶）
+                        {
+                            pos.y = groundHit.point.y + 0.06f;
+                            validGround = true;
+                        }
+                        else
+                        {
+                            // 落点在障碍物上方：往塔方向收回重试
+                            pos = aiTower + (pos - aiTower).normalized * 0.5f;
+                            probe = pos + Vector3.up * 2f;
+                        }
+                    }
+                    else
+                    {
+                        pos = aiTower + new Vector3(1.5f + i * 0.18f, 0.06f, 1.2f);
+                        validGround = true;
+                    }
+                }
 
                 GameObject soldierObj = CreateSoldierMarble(pos, 1, i + (ambush ? 100 : 0));
                 MarbleData data = soldierObj.GetComponent<MarbleData>();
@@ -469,14 +535,29 @@ namespace Dapaolou.Game
             List<MarbleData> availableMarbles = currentPlayer.GetAvailableMarbles();
             if (availableMarbles.Count > 0)
             {
-                // 自动选择第一个可用弹珠
-                marbleShooter.SelectMarble(availableMarbles[0]);
+                // 自动选择第一个可用弹珠——必须选"当前回合玩家自己的发射器"，
+                // 共享的 marbleShooter 序列化引用只指向某一个玩家，用它会把弹珠选进错误发射器
+                var shooter = FindShooterForPlayer(playerIndex);
+                if (shooter != null) shooter.SelectMarble(availableMarbles[0]);
             }
             else
             {
                 Debug.LogWarning($"Player {playerIndex} has no available marbles!");
                 EndCurrentTurn();
             }
+        }
+
+        /// <summary>
+        /// 找到指定玩家的发射器（布防后各玩家有独立 MarbleShooter）
+        /// </summary>
+        private MarbleShooter FindShooterForPlayer(int playerIndex)
+        {
+            foreach (var pm in FindObjectsOfType<PlayerManager>())
+            {
+                if (pm.GetPlayerId() == playerIndex)
+                    return pm.GetComponent<MarbleShooter>();
+            }
+            return marbleShooter;   // 兜底走序列化引用
         }
         
         /// <summary>
