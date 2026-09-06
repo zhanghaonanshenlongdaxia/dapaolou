@@ -307,9 +307,16 @@ namespace Dapaolou.Player
                 wt += Time.deltaTime;
                 yield return null;
             }
-            // 站定后转身面向瞄准方向
-            transform.rotation = Quaternion.LookRotation(aimFlat.normalized);
-            yield return new WaitForSeconds(0.4f);
+            // 站定后平滑转身正对发射方向，停顿后再弹
+            Quaternion aimRot = Quaternion.LookRotation(aimFlat.normalized);
+            float faceT = 0f;
+            while (Quaternion.Angle(transform.rotation, aimRot) > 2f && faceT < 1f && turnActive)
+            {
+                transform.rotation = Quaternion.Slerp(transform.rotation, aimRot, Time.deltaTime * 6f);
+                faceT += Time.deltaTime;
+                yield return null;
+            }
+            yield return new WaitForSeconds(0.6f);
             if (!turnActive) yield break;
 
             // 随机力度

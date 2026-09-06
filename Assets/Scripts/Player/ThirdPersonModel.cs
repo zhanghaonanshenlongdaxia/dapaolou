@@ -188,7 +188,9 @@ namespace Dapaolou.Player
                     break;
             }
             
-            modelAnimator.CrossFade(clipState, 0.15f, 0, 0);
+            // 必须用 FixedTime：CrossFade 的时长参数是目标剪辑长度的比例（Idle 3s→0.45s 过渡！），
+            // 会让站立时腿部残留走路、起步时先滑步再迈腿
+            modelAnimator.CrossFadeInFixedTime(clipState, 0.12f, 0, 0f);
             appliedClipState = currentState;
         }
         
@@ -520,7 +522,7 @@ namespace Dapaolou.Player
                 appliedClipState = currentState;
                 if (modelAnimator != null)
                 {
-                    modelAnimator.CrossFade("metarig|Idle", 0.1f, 0, 0);
+                    modelAnimator.CrossFadeInFixedTime("metarig|Idle", 0.12f, 0, 0f);
                 }
                 return;
             }
