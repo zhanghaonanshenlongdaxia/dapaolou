@@ -16,12 +16,18 @@ namespace Dapaolou.UI
         [SerializeField] private Button nextButton;
         [SerializeField] private TextMeshProUGUI trackLabel;   // 当前曲名
         [SerializeField] private TextMeshProUGUI toggleLabel;  // 暂停按钮上的字（暂停/播放）
+        [SerializeField] private Slider volumeSlider;           // 音量滑条
 
         void Start()
         {
             if (prevButton != null) prevButton.onClick.AddListener(() => { AudioManager.Instance?.PrevBgm(); });
             if (nextButton != null) nextButton.onClick.AddListener(() => { AudioManager.Instance?.NextBgm(); });
             if (toggleButton != null) toggleButton.onClick.AddListener(() => { AudioManager.Instance?.ToggleBgmPause(); });
+            if (volumeSlider != null)
+            {
+                volumeSlider.SetValueWithoutNotify(AudioManager.Instance != null ? AudioManager.Instance.bgmVolume : 0.4f);
+                volumeSlider.onValueChanged.AddListener(v => { if (AudioManager.Instance != null) AudioManager.Instance.SetBgmVolume(v); });
+            }
         }
 
         void Update()
